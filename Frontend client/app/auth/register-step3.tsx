@@ -4,23 +4,22 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Eye, EyeOff, User, Lock, Mail } from 'lucide-react-native';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useLanguage } from '@/contexts/LanguageContext';
-import { SPACING, BORDER_RADIUS, TYPOGRAPHY } from '@/constants/colors';
-import { Heading, Caption } from '@/components/atoms';
+import { SPACING } from '@/constants/colors';
 import { Stack, Row } from '@/components/ui';
 import { PageContainer } from '@/components/layouts';
 import Button from '@/components/Button';
 import Input from '@/components/Input';
-import AuthLogo from '@/components/AuthLogo';
-import { useAuth } from '@/contexts/AuthContext';
 import PasswordStrengthIndicator from '@/components/PasswordStrengthIndicator';
 import { apiService } from '@/services/api';
+import { AdaptiveCard } from '@/components/ui/AdaptiveCard';
+import { AdaptiveText } from '@/components/ui/AdaptiveText';
+import AuthPageLayout from '@/components/layouts/AuthPageLayout';
 
 export default function RegisterStep3Screen() {
   const { colors } = useTheme();
   const { t } = useLanguage();
   const router = useRouter();
   const params = useLocalSearchParams();
-  const { register } = useAuth();
   
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
@@ -48,6 +47,12 @@ export default function RegisterStep3Screen() {
     }
 
     console.log('📝 Profil créé, création du compte et envoi OTP...', { phone, fullName, email });
+    console.log('📤 Demande de création de compte (backend doit envoyer OTP) - payload:', {
+      phone,
+      full_name: fullName,
+      email: email || undefined,
+      country_code: 'CG',
+    });
     
     setIsLoading(true);
     try {
@@ -59,12 +64,24 @@ export default function RegisterStep3Screen() {
         password,
         country_code: 'CG'
       });
+
+      console.log('📨 Réponse register:', {
+        success: registerResult.success,
+        error: registerResult.error,
+        data: registerResult.data,
+      });
       
       if (registerResult.success) {
         console.log('✅ Compte créé avec succès, passage à l\'étape 2 pour vérification OTP');
         
         // L'OTP est automatiquement envoyé par le backend lors du register
-        const otpWasSent = (registerResult.data as any)?.verification?.message_sent || false;
+        const otpPayload = (registerResult.data as any)?.otp ?? (registerResult.data as any)?.verification;
+        const otpWasSent = Boolean(otpPayload?.message_sent);
+
+        console.log('📩 Statut envoi OTP (register):', {
+          message_sent: otpWasSent,
+          otp: otpPayload,
+        });
         
         router.push({
           pathname: '/auth/register-step2',
@@ -90,17 +107,31 @@ export default function RegisterStep3Screen() {
   };
 
   return (
-    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
-      <PageContainer>
-        <Stack spacing="lg" style={{ alignItems: 'center', marginTop: SPACING.xl }}>
-          <AuthLogo size={120} />
+    <AuthPageLayout title={t('createProfile' as any)}>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={{ flex: 1, backgroundColor: 'transparent' }}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
+      >
+        <PageContainer style={{ backgroundColor: 'transparent' }}>
+        <Stack spacing="md" style={{ alignItems: 'center', marginTop: SPACING.lg }}>
           <Stack spacing="xs" style={{ alignItems: 'center' }}>
-            <Heading level={1}>{t('createProfile' as any)}</Heading>
-            <Caption style={{ textAlign: 'center' }}>{t('step2Title' as any)}</Caption>
+            <AdaptiveText variant="display" weight="bold" style={{ textAlign: 'center' }}>
+              {t('createProfile' as any)}
+            </AdaptiveText>
+            <AdaptiveText variant="caption" weight="regular" style={{ textAlign: 'center' }}>
+              {t('step2Title' as any)}
+            </AdaptiveText>
           </Stack>
         </Stack>
 
-        <Stack spacing="md" style={{ marginTop: SPACING.xl }}>
+        <AdaptiveCard
+          margin={0}
+          padding={Platform.select({ ios: 18, android: 16 })}
+          variant="elevated"
+          style={{ width: '100%', marginTop: SPACING.lg }}
+        >
+        <Stack spacing="md">
           <Input 
             label={t('fullNameRequired' as any)} 
             value={fullName} 
@@ -164,9 +195,9 @@ export default function RegisterStep3Screen() {
               }
             />
 
-          <Caption style={{ textAlign: 'center', marginTop: SPACING.md }}>
+          <AdaptiveText variant="caption" weight="regular" color={colors.textSecondary} style={{ textAlign: 'center', marginTop: SPACING.sm }}>
             {t('termsAccept' as any)}
-          </Caption>
+          </AdaptiveText>
 
           <Button 
             title={t('createAccount' as any)} 
@@ -176,21 +207,11 @@ export default function RegisterStep3Screen() {
             disabled={!fullName || !password || !confirmPassword || password !== confirmPassword} 
             fullWidth 
           />
-
-          <Row align="center" style={{ marginVertical: SPACING.md }}>
-            <View style={{ flex: 1, height: 1, backgroundColor: colors.border }} />
-            <Caption style={{ marginHorizontal: SPACING.md }}>{t('or' as any)}</Caption>
-            <View style={{ flex: 1, height: 1, backgroundColor: colors.border }} />
-          </Row>
-
-          <Button 
-            title={t('alreadyHaveAccount' as any)} 
-            onPress={() => router.replace('/auth/login' as any)} 
-            variant="outline" 
-            fullWidth 
-          />
         </Stack>
-      </PageContainer>
-    </KeyboardAvoidingView>
+        </AdaptiveCard>
+
+        </PageContainer>
+      </KeyboardAvoidingView>
+    </AuthPageLayout>
   );
 }

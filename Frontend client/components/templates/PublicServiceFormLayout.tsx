@@ -11,11 +11,11 @@ import {
 } from 'react-native';
 import { Check } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import HeaderWithBackButton from '@/components/HeaderWithBackButton';
 import Button from '@/components/Button';
 import { useTheme } from '@/contexts/ThemeContext';
 import { BORDER_RADIUS, SPACING, TYPOGRAPHY } from '@/constants/colors';
+import GradientBackground from '@/components/atoms/GradientBackground';
 
 interface PublicServiceFormLayoutProps {
   title: string;
@@ -49,12 +49,11 @@ export default function PublicServiceFormLayout({
   successMessage = 'Paiement effectué avec succès !',
 }: PublicServiceFormLayoutProps) {
   const { colors } = useTheme();
-  const insets = useSafeAreaInsets();
 
   return (
-    <>
+    <GradientBackground style={{ flex: 1 }} opacity="10">
       <HeaderWithBackButton title={title} />
-      <View style={[styles.container, { backgroundColor: colors.background }]}>
+      <View style={[styles.container, { backgroundColor: 'transparent' }]}>
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           style={{ flex: 1 }}
@@ -150,7 +149,7 @@ export default function PublicServiceFormLayout({
           </Animated.View>
         </View>
       </Modal>
-    </>
+    </GradientBackground>
   );
 }
 

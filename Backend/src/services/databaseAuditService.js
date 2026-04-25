@@ -3,7 +3,7 @@
  * Stockage persistant et recherche avancée des logs d'audit
  */
 
-import { supabaseAdmin } from '../config/supabase.js';
+import { dbAdmin } from '../config/db.js';
 import { logger } from '../utils/logger.js';
 
 class DatabaseAuditService {
@@ -25,14 +25,14 @@ class DatabaseAuditService {
   async initializeAuditTables() {
     try {
       // Vérifier que les tables existent déjà (créées via MCP)
-      const { data, error, count } = await supabaseAdmin
+      const { data, error, count } = await dbAdmin
         .from('audit_events')
         .select('*', { count: 'exact', head: true });
       
       if (error) {
         this.isConnected = false;
         logger.warn('Tables d\'audit non accessibles (mode développement):', { error: error.message });
-        logger.info('💡 En production, utilisez les tables créées via MCP Supabase');
+        logger.info('💡 En production, utilisez les tables d\'audit PostgreSQL');
         logger.info('📝 Audit fonctionnera en mode fichiers uniquement');
       } else {
         this.isConnected = true;
@@ -137,7 +137,7 @@ class DatabaseAuditService {
       this.eventBuffer = [];
 
       // Insérer en batch
-      const { error } = await supabaseAdmin
+      const { error } = await dbAdmin
         .from('audit_events')
         .insert(events);
 
@@ -162,7 +162,7 @@ class DatabaseAuditService {
    */
   async searchAuditLogs(criteria = {}) {
     try {
-      let query = supabaseAdmin.from('audit_events').select('*');
+      let query = dbAdmin.from('audit_events').select('*');
 
       // Filtres de base
       if (criteria.startDate) {
@@ -235,28 +235,28 @@ class DatabaseAuditService {
       const startDate = this.getStartDateForPeriod(period);
       
       // Statistiques par catégorie
-      const { data: categoryStats } = await supabaseAdmin
+      const { data: categoryStats } = await dbAdmin
         .from('audit_events')
         .select('category, count(*)')
         .gte('timestamp', startDate)
         .group('category');
 
       // Statistiques par sévérité
-      const { data: severityStats } = await supabaseAdmin
+      const { data: severityStats } = await dbAdmin
         .from('audit_events')
         .select('severity, count(*)')
         .gte('timestamp', startDate)
         .group('severity');
 
       // Événements suspects
-      const { count: suspiciousCount } = await supabaseAdmin
+      const { count: suspiciousCount } = await dbAdmin
         .from('audit_events')
         .select('*', { count: 'exact', head: true })
         .gte('timestamp', startDate)
         .eq('is_suspicious', true);
 
       // Top IPs
-      const { data: topIPs } = await supabaseAdmin
+      const { data: topIPs } = await dbAdmin
         .from('audit_events')
         .select('ip_address, count(*)')
         .gte('timestamp', startDate)
@@ -266,7 +266,7 @@ class DatabaseAuditService {
         .limit(10);
 
       // Top utilisateurs
-      const { data: topUsers } = await supabaseAdmin
+      const { data: topUsers } = await dbAdmin
         .from('audit_events')
         .select('user_id, count(*)')
         .gte('timestamp', startDate)
@@ -300,7 +300,7 @@ class DatabaseAuditService {
       const stats = await this.getAuditStatistics('custom');
       
       // Événements critiques
-      const { data: criticalEvents } = await supabaseAdmin
+      const { data: criticalEvents } = await dbAdmin
         .from('audit_events')
         .select('*')
         .gte('timestamp', startDate)
@@ -310,7 +310,7 @@ class DatabaseAuditService {
         .limit(100);
 
       // Activités suspectes
-      const { data: suspiciousEvents } = await supabaseAdmin
+      const { data: suspiciousEvents } = await dbAdmin
         .from('audit_events')
         .select('*')
         .gte('timestamp', startDate)
@@ -320,7 +320,7 @@ class DatabaseAuditService {
         .limit(100);
 
       // Erreurs fréquentes
-      const { data: commonErrors } = await supabaseAdmin
+      const { data: commonErrors } = await dbAdmin
         .from('audit_events')
         .select('error_code, error_message, count(*)')
         .gte('timestamp', startDate)
@@ -353,7 +353,7 @@ class DatabaseAuditService {
       const cutoffDate = new Date();
       cutoffDate.setDate(cutoffDate.getDate() - retentionDays);
 
-      const { error } = await supabaseAdmin
+      const { error } = await dbAdmin
         .from('audit_events')
         .delete()
         .lt('timestamp', cutoffDate.toISOString());

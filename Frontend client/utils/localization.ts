@@ -137,7 +137,7 @@ export const COUNTRIES: Record<string, CountryInfo> = {
  * Obtenir les informations d'un pays par son code
  */
 export const getCountryInfo = (countryCode: string): CountryInfo => {
-  return COUNTRIES[countryCode] || COUNTRIES['CD']; // Par défaut RDC
+  return COUNTRIES[countryCode] || COUNTRIES['CG']; // Par défaut Congo
 };
 
 /**
@@ -354,31 +354,247 @@ export const getDecimalPlaces = (currencyCode: string): number => {
  */
 
 /**
+ * Mapper les codes pays géolocalisés vers nos codes pays
+ */
+const GEO_COUNTRY_TO_COUNTRY: Record<string, string> = {
+  // Afrique Centrale
+  'CD': 'CD', // RDC
+  'CG': 'CG', // Congo-Brazzaville
+  'CM': 'CM', // Cameroun
+  'GA': 'GA', // Gabon
+  'CF': 'CG', // Centrafrique -> Congo
+  'TD': 'CG', // Tchad -> Congo
+  'GQ': 'CG', // Guinée Équatoriale -> Congo
+  
+  // Afrique de l'Ouest
+  'CI': 'CI', // Côte d'Ivoire
+  'SN': 'SN', // Sénégal
+  'ML': 'SN', // Mali -> Sénégal
+  'BF': 'SN', // Burkina Faso -> Sénégal
+  'NE': 'SN', // Niger -> Sénégal
+  'BJ': 'SN', // Bénin -> Sénégal
+  'TG': 'SN', // Togo -> Sénégal
+  'SL': 'SN', // Sierra Leone -> Sénégal
+  'LR': 'SN', // Libéria -> Sénégal
+  'GN': 'SN', // Guinée -> Sénégal
+  'GW': 'SN', // Guinée-Bissau -> Sénégal
+  
+  // Afrique du Nord
+  'MA': 'MA', // Maroc
+  'DZ': 'MA', // Algérie -> Maroc
+  'TN': 'MA', // Tunisie -> Maroc
+  'LY': 'MA', // Libye -> Maroc
+  'EG': 'MA', // Égypte -> Maroc
+  
+  // Europe (fallback vers Congo)
+  'FR': 'CG', // France -> Congo
+  'BE': 'CG', // Belgique -> Congo
+  'CH': 'CG', // Suisse -> Congo
+  'DE': 'CG', // Allemagne -> Congo
+  'ES': 'CG', // Espagne -> Congo
+  'IT': 'CG', // Italie -> Congo
+  'GB': 'CG', // UK -> Congo
+  'NL': 'CG', // Pays-Bas -> Congo
+  'PT': 'CG', // Portugal -> Congo
+  
+  // Amérique (fallback vers Congo)
+  'US': 'CG', // USA -> Congo
+  'CA': 'CG', // Canada -> Congo
+  'BR': 'CG', // Brésil -> Congo
+  'AR': 'CG', // Argentine -> Congo
+  'MX': 'CG', // Mexique -> Congo
+  
+  // Asie (fallback vers Congo)
+  'CN': 'CG', // Chine -> Congo
+  'IN': 'CG', // Inde -> Congo
+  'JP': 'CG', // Japon -> Congo
+  'KR': 'CG', // Corée -> Congo
+  'TH': 'CG', // Thaïlande -> Congo
+  'SG': 'CG', // Singapour -> Congo
+};
+
+/**
+ * Obtenir le pays par géolocalisation
+ */
+export const detectCountryByGeolocation = async (): Promise<string> => {
+  return new Promise(async (resolve) => {
+    try {
+      // Vérifier si nous sommes sur mobile (Expo) ou web
+      const isExpo = typeof window !== 'undefined' && window.expo;
+      
+      if (!isExpo) {
+        // Web : utiliser l'API du navigateur
+        console.log('🌐 Mode web détecté, utilisation de l\'API navigateur');
+        if (!navigator.geolocation) {
+          console.log('⚠️ Géolocalisation non supportée, utilisation de la locale');
+          resolve(detectUserCountry());
+          return;
+        }
+        
+        navigator.geolocation.getCurrentPosition(
+          async (position) => {
+            try {
+              const { latitude, longitude } = position.coords;
+              console.log('📍 Position détectée (navigateur):', { latitude, longitude });
+              
+              const response = await fetch(
+                `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&zoom=10&addressdetails=1`,
+                {
+                  headers: {
+                    'User-Agent': 'Mossombi-App/1.0'
+                  }
+                }
+              );
+              
+              if (!response.ok) {
+                throw new Error('Erreur API géolocalisation');
+              }
+              
+              const data = await response.json();
+              const countryCode = data.address?.country_code?.toUpperCase();
+              
+              if (countryCode && GEO_COUNTRY_TO_COUNTRY[countryCode]) {
+                const mappedCountry = GEO_COUNTRY_TO_COUNTRY[countryCode];
+                console.log(`✅ Pays détecté par géolocalisation (navigateur): ${countryCode} -> ${mappedCountry}`);
+                resolve(mappedCountry);
+              } else if (countryCode) {
+                console.log(`⚠️ Pays ${countryCode} non mappé, utilisation du défaut: CG`);
+                resolve('CG');
+              } else {
+                console.log('⚠️ Impossible de détecter le pays, utilisation de la locale');
+                resolve(detectUserCountry());
+              }
+            } catch (error) {
+              console.error('❌ Erreur géolocalisation (navigateur):', error);
+              resolve(detectUserCountry());
+            }
+          },
+          (error) => {
+            console.error('❌ Erreur permission géolocalisation (navigateur):', error);
+            resolve(detectUserCountry());
+          },
+          {
+            enableHighAccuracy: true,
+            timeout: 10000,
+            maximumAge: 300000
+          }
+        );
+        return;
+      }
+
+      // Mobile : utiliser Expo Location
+      console.log('📱 Mode mobile détecté, tentative d\'utiliser Expo Location');
+      
+      try {
+        // Importer Expo Location de manière synchrone
+        const Location = require('expo-location').default;
+        
+        if (!Location) {
+          console.log('⚠️ Expo Location non disponible, utilisation de la locale');
+          resolve(detectUserCountry());
+          return;
+        }
+
+        // Vérifier les permissions
+        let { status } = await Location.requestForegroundPermissionsAsync();
+        
+        if (status !== 'granted') {
+          console.log('⚠️ Permission de géolocalisation refusée, utilisation de la locale');
+          resolve(detectUserCountry());
+          return;
+        }
+
+        // Obtenir la position actuelle
+        const location = await Location.getCurrentPositionAsync({
+          accuracy: Location.Accuracy.Balanced,
+        });
+
+        const { latitude, longitude } = location.coords;
+        console.log('📍 Position détectée (Expo):', { latitude, longitude });
+
+        // Utiliser l'API Nominatim pour la géolocalisation inverse
+        const response = await fetch(
+          `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&zoom=10&addressdetails=1`,
+          {
+            headers: {
+              'User-Agent': 'Mossombi-App/1.0'
+            }
+          }
+        );
+
+        if (!response.ok) {
+          throw new Error('Erreur API géolocalisation');
+        }
+
+        const data = await response.json();
+        const countryCode = data.address?.country_code?.toUpperCase();
+
+        if (countryCode && GEO_COUNTRY_TO_COUNTRY[countryCode]) {
+          const mappedCountry = GEO_COUNTRY_TO_COUNTRY[countryCode];
+          console.log(`✅ Pays détecté par géolocalisation (Expo): ${countryCode} -> ${mappedCountry}`);
+          resolve(mappedCountry);
+        } else if (countryCode) {
+          console.log(`⚠️ Pays ${countryCode} non mappé, utilisation du défaut: CG`);
+          resolve('CG');
+        } else {
+          console.log('⚠️ Impossible de détecter le pays, utilisation de la locale');
+          resolve(detectUserCountry());
+        }
+
+      } catch (expoError) {
+        console.log('⚠️ Expo Location non disponible, utilisation de la locale');
+        console.log('ℹ️ Détail Expo Location:', expoError instanceof Error ? expoError.message : String(expoError));
+        resolve(detectUserCountry());
+      }
+
+    } catch (error) {
+      console.error('❌ Erreur géolocalisation générale:', error);
+      resolve(detectUserCountry());
+    }
+  });
+};
+
+/**
+ * Détecter le pays avec géolocalisation en priorité
+ */
+export const detectUserCountryWithGeolocation = async (): Promise<string> => {
+  try {
+    // Essayer la géolocalisation d'abord
+    const geoCountry = await detectCountryByGeolocation();
+    return geoCountry;
+  } catch (error) {
+    console.log('⚠️ Échec géolocalisation, fallback sur locale');
+    console.log('ℹ️ Détail géolocalisation:', error instanceof Error ? error.message : String(error));
+    return detectUserCountry();
+  }
+};
+
+/**
  * Mapper les locales système vers nos codes pays
  */
 const LOCALE_TO_COUNTRY: Record<string, string> = {
   'fr-CD': 'CD',
   'fr-CG': 'CG', 
-  'fr-FR': 'FR',
-  'fr-BE': 'BE',
-  'fr-CA': 'CA',
-  'fr-CH': 'CH',
+  'fr-FR': 'CG',  // Rediriger FR vers Congo
+  'fr-BE': 'CG',  // Rediriger BE vers Congo
+  'fr-CA': 'CG',  // Rediriger CA vers Congo
+  'fr-CH': 'CG',  // Rediriger CH vers Congo
   'fr-SN': 'SN',
   'fr-CI': 'CI',
   'fr-CM': 'CM',
   'fr-GA': 'GA',
-  'en-US': 'US',
-  'en-GB': 'GB',
-  'de-DE': 'DE',
-  'es-ES': 'ES',
-  'it-IT': 'IT',
+  'en-US': 'CG',  // Rediriger US vers Congo
+  'en-GB': 'CG',  // Rediriger GB vers Congo
+  'de-DE': 'CG',  // Rediriger DE vers Congo
+  'es-ES': 'CG',  // Rediriger ES vers Congo
+  'it-IT': 'CG',  // Rediriger IT vers Congo
   'ar-MA': 'MA',
   // Fallbacks pour les langues principales
   'fr': 'CG', // Par défaut Congo pour le français
-  'en': 'US', // Par défaut US pour l'anglais
-  'de': 'DE',
-  'es': 'ES',
-  'it': 'IT',
+  'en': 'CG', // Par défaut Congo pour l'anglais
+  'de': 'CG',
+  'es': 'CG',
+  'it': 'CG',
   'ar': 'MA'
 };
 
@@ -438,7 +654,7 @@ export const getDefaultCurrencyByCountry = (countryCode: string): string => {
 };
 
 /**
- * Configuration automatique complète selon le pays
+ * Configuration automatique complète selon le pays (fallback pour compatibilité)
  */
 export const getAutoConfigByCountry = (countryCode?: string) => {
   const detectedCountry = countryCode || detectUserCountry();
@@ -458,4 +674,70 @@ export const getAutoConfigByCountry = (countryCode?: string) => {
     locale: country.locale,
     flag: country.flag
   };
+};
+
+/**
+ * Configuration automatique complète avec géolocalisation
+ */
+export const getAutoConfigByCountryWithGeolocation = async (countryCode?: string) => {
+  if (countryCode) {
+    // Si un pays est spécifié, l'utiliser directement
+    const country = getCountryInfo(countryCode);
+    const language = getDefaultLanguageByCountry(countryCode);
+    const countryName = language === 'en' ? 
+      (country.nameEn || country.name) : 
+      country.name;
+    
+    return {
+      country: countryCode,
+      countryName,
+      language,
+      currency: getDefaultCurrencyByCountry(countryCode),
+      locale: country.locale,
+      flag: country.flag,
+      detectionMethod: 'manual'
+    };
+  }
+  
+  try {
+    // Essayer la géolocalisation d'abord
+    const detectedCountry = await detectUserCountryWithGeolocation();
+    const country = getCountryInfo(detectedCountry);
+    const language = getDefaultLanguageByCountry(detectedCountry);
+    
+    const countryName = language === 'en' ? 
+      (country.nameEn || country.name) : 
+      country.name;
+    
+    return {
+      country: detectedCountry,
+      countryName,
+      language,
+      currency: getDefaultCurrencyByCountry(detectedCountry),
+      locale: country.locale,
+      flag: country.flag,
+      detectionMethod: 'geolocation'
+    };
+  } catch (error) {
+    console.error('❌ Échec détection, fallback sur locale:', error);
+    
+    // Fallback sur la détection par locale
+    const detectedCountry = detectUserCountry();
+    const country = getCountryInfo(detectedCountry);
+    const language = getDefaultLanguageByCountry(detectedCountry);
+    
+    const countryName = language === 'en' ? 
+      (country.nameEn || country.name) : 
+      country.name;
+    
+    return {
+      country: detectedCountry,
+      countryName,
+      language,
+      currency: getDefaultCurrencyByCountry(detectedCountry),
+      locale: country.locale,
+      flag: country.flag,
+      detectionMethod: 'locale'
+    };
+  }
 };

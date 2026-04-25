@@ -1,12 +1,13 @@
 import React, { useState, useMemo } from 'react';
 import { ScrollView, View, Pressable } from 'react-native';
-import { ArrowUpRight, ArrowDownLeft, Filter } from 'lucide-react-native';
+import { ArrowUpRight, ArrowDownLeft } from 'lucide-react-native';
 import HeaderWithBackButton from '@/components/HeaderWithBackButton';
 import { useTheme } from '@/contexts/ThemeContext';
 import { SPACING, BORDER_RADIUS, TYPOGRAPHY, SHADOWS } from '@/constants/colors';
-import { Heading, Body, Caption, Badge } from '@/components/atoms';
+import { Body, Caption, Badge } from '@/components/atoms';
 import { Stack, Row } from '@/components/ui';
 import PageContainer from '@/components/layouts/PageContainer';
+import GradientBackground from '@/components/atoms/GradientBackground';
 
 interface Transaction {
   id: string;
@@ -60,9 +61,9 @@ export default function TransactionsScreen() {
   };
 
   return (
-    <>
+    <GradientBackground style={{ flex: 1 }} opacity="10">
       <HeaderWithBackButton title="Historique" />
-      <PageContainer scrollable={false}>
+      <PageContainer scrollable={false} style={{ backgroundColor: 'transparent' }}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingVertical: SPACING.md, gap: SPACING.sm }}>
           {FILTERS.map((f) => (
             <Pressable key={f.id} onPress={() => setFilter(f.id as any)} style={{ backgroundColor: filter === f.id ? colors.primary : colors.card, borderRadius: BORDER_RADIUS.full, paddingHorizontal: SPACING.md, paddingVertical: SPACING.xs }}>
@@ -101,6 +102,6 @@ export default function TransactionsScreen() {
           </Stack>
         </ScrollView>
       </PageContainer>
-    </>
+    </GradientBackground>
   );
 }

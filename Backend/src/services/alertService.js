@@ -48,7 +48,10 @@ class AlertService {
     this.resetCounters();
     
     // Reset des compteurs toutes les heures
-    setInterval(() => this.resetCounters(), 60 * 60 * 1000);
+    const interval = setInterval(() => this.resetCounters(), 60 * 60 * 1000);
+    if (process.env.NODE_ENV === 'test') {
+      interval.unref();
+    }
 
     // Initialiser les services APRÈS la configuration
     this.initializeEmail();

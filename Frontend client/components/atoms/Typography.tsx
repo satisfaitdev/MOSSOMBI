@@ -2,6 +2,7 @@ import React from 'react';
 import { Text, TextProps, StyleSheet } from 'react-native';
 import { useTheme } from '@/contexts/ThemeContext';
 import { TYPOGRAPHY } from '@/constants/colors';
+import { AdaptiveText } from '@/components/ui/AdaptiveText';
 
 // ==========================================
 // TYPES
@@ -75,21 +76,17 @@ export function Heading({
     },
   };
 
+  const adaptiveVariant = level === 1 ? 'display' : level === 2 ? 'headline' : 'title';
   return (
-    <Text
-      style={[
-        styles.base,
-        headingStyles[level],
-        {
-          color: color || colors.text,
-          textAlign: align,
-        },
-        style,
-      ]}
-      {...props}
+    <AdaptiveText
+      variant={adaptiveVariant}
+      weight={level <= 2 ? 'bold' : 'semibold'}
+      color={color || colors.text}
+      style={[{ textAlign: align }, headingStyles[level], style]}
+      {...(props as any)}
     >
       {children}
-    </Text>
+    </AdaptiveText>
   );
 }
 
@@ -122,20 +119,15 @@ export function Body({
   };
 
   return (
-    <Text
-      style={[
-        styles.base,
-        styles.body,
-        {
-          color: color || variantColors[variant],
-          textAlign: align,
-        },
-        style,
-      ]}
-      {...props}
+    <AdaptiveText
+      variant="body"
+      weight="regular"
+      color={color || variantColors[variant]}
+      style={[{ textAlign: align }, styles.body, style]}
+      {...(props as any)}
     >
       {children}
-    </Text>
+    </AdaptiveText>
   );
 }
 
@@ -160,20 +152,15 @@ export function Caption({
   const { colors } = useTheme();
 
   return (
-    <Text
-      style={[
-        styles.base,
-        styles.caption,
-        {
-          color: color || colors.textSecondary,
-          textAlign: align,
-        },
-        style,
-      ]}
-      {...props}
+    <AdaptiveText
+      variant="caption"
+      weight="regular"
+      color={color || colors.textSecondary}
+      style={[{ textAlign: align }, styles.caption, style]}
+      {...(props as any)}
     >
       {children}
-    </Text>
+    </AdaptiveText>
   );
 }
 

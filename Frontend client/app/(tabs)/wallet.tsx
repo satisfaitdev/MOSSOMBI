@@ -15,6 +15,7 @@ import { formatCurrencyWithConversion } from '@/utils/localization';
 import { useUserPreferences } from '@/contexts/UserPreferencesContext';
 import { AuthHelpers } from '@/utils/authMiddleware';
 import { usePrivacySettings } from '@/hooks/usePrivacySettings';
+import GradientBackground from '@/components/atoms/GradientBackground';
 
 
 export default function WalletScreen() {
@@ -27,7 +28,7 @@ export default function WalletScreen() {
 
   // Connexion au backend pour les données du wallet et utilisateur
   const { wallet, transactions } = useWallet();
-  const { user } = useAuth();
+  useAuth();
   const { getDisplayCurrency } = useUserPreferences();
   const { settings } = usePrivacySettings();
 
@@ -64,30 +65,43 @@ export default function WalletScreen() {
 
   const filteredTransactions = useMemo(() => {
     if (filter === 'all') return transactions.list;
-    return transactions.list.filter((t: any) => t.category === filter);
+
+    if (filter === 'deposit') {
+      return transactions.list.filter((t) => ['recharge', 'refund', 'bonus'].includes(t.type));
+    }
+
+    if (filter === 'withdrawal') {
+      return transactions.list.filter((t) => t.type === 'withdrawal');
+    }
+
+    // purchase
+    return transactions.list.filter((t) => ['payment', 'transfer'].includes(t.type));
   }, [transactions.list, filter]);
 
   // Écran de chargement pendant l'authentification
   if (isAuthenticating) {
     return (
-      <PageContainer>
-        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-          <Text style={{ fontSize: 18, color: colors.text, marginBottom: 10 }}>
-            🔐 Vérification de l'accès...
-          </Text>
-          <Text style={{ color: colors.textSecondary }}>
-            Authentification en cours
-          </Text>
-        </View>
-      </PageContainer>
+      <GradientBackground style={{ flex: 1 }} opacity="10">
+        <PageContainer style={{ backgroundColor: 'transparent' }}>
+          <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+            <Text style={{ fontSize: 18, color: colors.text, marginBottom: 10 }}>
+              🔐 Vérification de l'accès...
+            </Text>
+            <Text style={{ color: colors.textSecondary }}>
+              Authentification en cours
+            </Text>
+          </View>
+        </PageContainer>
+      </GradientBackground>
     );
   }
 
   // Écran d'authentification si pas authentifié
   if (!isAuthenticated) {
     return (
-      <PageContainer>
-        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: SPACING.lg }}>
+      <GradientBackground style={{ flex: 1 }} opacity="10">
+        <PageContainer style={{ backgroundColor: 'transparent' }}>
+          <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: SPACING.lg }}>
           <Text style={{ fontSize: 24, color: colors.text, marginBottom: SPACING.md }}>
             🔒 Portefeuille Sécurisé
           </Text>
@@ -131,14 +145,16 @@ export default function WalletScreen() {
               Retour
             </Text>
           </TouchableOpacity>
-        </View>
-      </PageContainer>
+          </View>
+        </PageContainer>
+      </GradientBackground>
     );
   }
 
   // Contenu principal du portefeuille (authentifié)
   return (
-    <PageContainer>
+    <GradientBackground style={{ flex: 1 }} opacity="10">
+      <PageContainer style={{ backgroundColor: 'transparent' }}>
         <Stack spacing="lg">
           <LinearGradient colors={GRADIENTS.primary.colors} start={GRADIENTS.primary.start} end={GRADIENTS.primary.end} style={{ borderRadius: BORDER_RADIUS.xl, padding: SPACING.lg, ...SHADOWS.wallet3D }}>
             <Row justify="space-between" align="center">
@@ -180,21 +196,22 @@ export default function WalletScreen() {
             {filteredTransactions.map((tx) => (
               <Section variant="elevated" key={tx.id}>
                 <Row spacing="md" align="center">
-                  <View style={{ width: 40, height: 40, backgroundColor: tx.type === 'credit' ? colors.success + '20' : colors.error + '20', borderRadius: BORDER_RADIUS.md, alignItems: 'center', justifyContent: 'center' }}>
-                    {tx.type === 'credit' ? <ArrowDownRight size={20} color={colors.success} /> : <ArrowUpRight size={20} color={colors.error} />}
+                  <View style={{ width: 40, height: 40, backgroundColor: ['recharge', 'refund', 'bonus'].includes(tx.type) ? colors.success + '20' : colors.error + '20', borderRadius: BORDER_RADIUS.md, alignItems: 'center', justifyContent: 'center' }}>
+                    {['recharge', 'refund', 'bonus'].includes(tx.type) ? <ArrowDownRight size={20} color={colors.success} /> : <ArrowUpRight size={20} color={colors.error} />}
                   </View>
                   <View style={{ flex: 1 }}>
-                    <Body style={{ fontWeight: TYPOGRAPHY.weights.semibold }}>{tx.title}</Body>
-                    <Caption style={{ marginTop: SPACING.xs }}>{new Date(tx.date).toLocaleDateString('fr-FR')}</Caption>
+                    <Body style={{ fontWeight: TYPOGRAPHY.weights.semibold }}>{tx.description}</Body>
+                    <Caption style={{ marginTop: SPACING.xs }}>{new Date(tx.created_at).toLocaleDateString('fr-FR')}</Caption>
                   </View>
-                  <Body style={{ fontWeight: TYPOGRAPHY.weights.bold, color: tx.type === 'credit' ? colors.success : colors.error }}>
-                    {tx.amount > 0 ? '+' : ''}{tx.amount.toLocaleString()} CDF
+                  <Body style={{ fontWeight: TYPOGRAPHY.weights.bold, color: ['recharge', 'refund', 'bonus'].includes(tx.type) ? colors.success : colors.error }}>
+                    {['recharge', 'refund', 'bonus'].includes(tx.type) ? '+' : '-'}{tx.amount.toLocaleString()} CDF
                   </Body>
                 </Row>
               </Section>
             ))}
           </Stack>
         </Stack>
-    </PageContainer>
+      </PageContainer>
+    </GradientBackground>
   );
 }

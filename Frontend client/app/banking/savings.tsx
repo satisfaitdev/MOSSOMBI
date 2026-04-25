@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import { View, Pressable } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { PiggyBank, TrendingUp } from 'lucide-react-native';
-import { useRouter } from 'expo-router';
 import { useTheme } from '@/contexts/ThemeContext';
 import { SPACING, BORDER_RADIUS, TYPOGRAPHY, SHADOWS } from '@/constants/colors';
 import { Heading, Body, Caption } from '@/components/atoms';
@@ -13,10 +12,10 @@ import { SuccessModal } from '@/components/organisms/modals';
 import Button from '@/components/Button';
 import Input from '@/components/Input';
 import HeaderWithBackButton from '@/components/HeaderWithBackButton';
+import GradientBackground from '@/components/atoms/GradientBackground';
 
 export default function SavingsScreen() {
   const { colors } = useTheme();
-  const router = useRouter();
   const [amount, setAmount] = useState('');
   const [savingsPlan, setSavingsPlan] = useState('');
   const [loading, setLoading] = useState(false);
@@ -48,9 +47,9 @@ export default function SavingsScreen() {
   };
 
   return (
-    <>
+    <GradientBackground style={{ flex: 1 }} opacity="10">
       <HeaderWithBackButton title="Épargne" />
-      <PageContainer>
+      <PageContainer style={{ backgroundColor: 'transparent' }}>
         <Stack spacing="lg">
           <LinearGradient colors={[colors.gradient.start, colors.gradient.middle, colors.gradient.end]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={{ borderRadius: BORDER_RADIUS.xl, padding: SPACING.lg, ...SHADOWS.lg }}>
             <Row spacing="md" align="center">
@@ -90,6 +89,6 @@ export default function SavingsScreen() {
         </Stack>
       </PageContainer>
       <SuccessModal {...successModal.props} />
-    </>
+    </GradientBackground>
   );
 }

@@ -6,7 +6,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { translations, Language, TranslationKey } from '@/locales';
-import { getAutoConfigByCountry } from '@/utils/localization';
+import { getAutoConfigByCountryWithGeolocation } from '@/utils/localization';
 
 interface LanguageContextType {
   language: Language;
@@ -32,9 +32,9 @@ interface LanguageProviderProps {
 const STORAGE_KEY = 'app_language';
 
 // Détection automatique de la langue par défaut selon le pays
-const getDefaultLanguage = (): Language => {
+const getDefaultLanguage = async (): Promise<Language> => {
   try {
-    const autoConfig = getAutoConfigByCountry();
+    const autoConfig = await getAutoConfigByCountryWithGeolocation();
     console.log('🌍 Configuration automatique détectée:', autoConfig);
     return autoConfig.language;
   } catch (error) {
@@ -44,7 +44,7 @@ const getDefaultLanguage = (): Language => {
 };
 
 export function LanguageProvider({ children }: LanguageProviderProps) {
-  const [language, setCurrentLanguage] = useState<Language>(getDefaultLanguage());
+  const [language, setCurrentLanguage] = useState<Language>('fr');
   const [isLoading, setIsLoading] = useState(true);
 
   // Charger la langue sauvegardée au démarrage
@@ -60,7 +60,7 @@ export function LanguageProvider({ children }: LanguageProviderProps) {
         setCurrentLanguage(savedLanguage as Language);
       } else {
         // Première utilisation : utiliser la détection automatique
-        const autoLanguage = getDefaultLanguage();
+        const autoLanguage = await getDefaultLanguage();
         console.log('🌍 Première utilisation - Langue automatique:', autoLanguage);
         setCurrentLanguage(autoLanguage);
         await AsyncStorage.setItem(STORAGE_KEY, autoLanguage);

@@ -1,0 +1,16 @@
+# Root gitignore
+node-installer.msi
+psql
+set
+*.bat
+*.ps1
+.env
+.DS_Store
+Thumbs.db
+
+# Dependencies
+node_modules/
+.dart_tool/
+.packages
+build/
+dist/

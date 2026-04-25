@@ -10,6 +10,7 @@ import { Stack, Row } from '@/components/ui';
 import { PageContainer } from '@/components/layouts';
 import { useSuccessModal } from '@/hooks';
 import { SuccessModal } from '@/components/organisms/modals';
+import GradientBackground from '@/components/atoms/GradientBackground';
 
 interface Language {
   code: string;
@@ -52,9 +53,9 @@ export default function LanguageScreen() {
   };
 
   return (
-    <>
+    <GradientBackground style={{ flex: 1 }} opacity="10">
       <HeaderWithBackButton title="Langue" />
-      <PageContainer>
+      <PageContainer style={{ backgroundColor: 'transparent' }}>
         <Stack spacing="lg">
           {/* En-tête */}
           <View style={{ backgroundColor: colors.primary + '10', borderRadius: BORDER_RADIUS.lg, padding: SPACING.md, borderWidth: 1, borderColor: colors.primary + '30' }}>
@@ -149,6 +150,6 @@ export default function LanguageScreen() {
       </PageContainer>
 
       <SuccessModal {...successModal.props} />
-    </>
+    </GradientBackground>
   );
 }

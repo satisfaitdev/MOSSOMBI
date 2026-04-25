@@ -5,7 +5,8 @@
 
 import express from 'express';
 import Joi from 'joi';
-import { supabaseAdmin } from '../config/supabase.js';
+import axios from 'axios';
+import { dbAdmin } from '../config/db.js';
 import { asyncHandler, ValidationError, NotFoundError } from '../middleware/errorHandler.js';
 import { authenticateToken } from '../middleware/authMiddleware.js';
 import { logger } from '../utils/logger.js';
@@ -48,7 +49,7 @@ const createTransactionSchema = Joi.object({
  */
 router.get('/', authenticateToken, asyncHandler(async (req, res) => {
   // Récupérer les informations utilisateur
-  const { data: user, error: userError } = await supabaseAdmin
+  const { data: user, error: userError } = await dbAdmin
     .from('users')
     .select('points, metadata')
     .eq('id', req.user.id)
@@ -63,14 +64,14 @@ router.get('/', authenticateToken, asyncHandler(async (req, res) => {
   }
 
   // Récupérer le solde du wallet (si table séparée existe)
-  const { data: wallet } = await supabaseAdmin
+  const { data: wallet } = await dbAdmin
     .from('user_wallets')
     .select('balance, currency, status, last_transaction_at')
     .eq('user_id', req.user.id)
     .single();
 
   // Récupérer les statistiques des transactions
-  const { data: transactionStats } = await supabaseAdmin
+  const { data: transactionStats } = await dbAdmin
     .from('transactions')
     .select('type, amount, status')
     .eq('user_id', req.user.id);
@@ -95,7 +96,7 @@ router.get('/', authenticateToken, asyncHandler(async (req, res) => {
   }, {});
 
   // Récupérer les dernières transactions
-  const { data: recentTransactions } = await supabaseAdmin
+  const { data: recentTransactions } = await dbAdmin
     .from('transactions')
     .select('*')
     .eq('user_id', req.user.id)
@@ -124,7 +125,7 @@ router.get('/', authenticateToken, asyncHandler(async (req, res) => {
  * Récupérer uniquement le solde
  */
 router.get('/balance', authenticateToken, asyncHandler(async (req, res) => {
-  const { data: wallet } = await supabaseAdmin
+  const { data: wallet } = await dbAdmin
     .from('user_wallets')
     .select('balance, currency')
     .eq('user_id', req.user.id)
@@ -156,7 +157,7 @@ router.get('/transactions', authenticateToken, asyncHandler(async (req, res) => 
   const { type, status, start_date, end_date, min_amount, max_amount, limit, offset, sort, order } = value;
 
   // Construction de la requête
-  let query = supabaseAdmin
+  let query = dbAdmin
     .from('transactions')
     .select('*', { count: 'exact' })
     .eq('user_id', req.user.id);
@@ -185,7 +186,7 @@ router.get('/transactions', authenticateToken, asyncHandler(async (req, res) => 
   }
 
   // Calculer les totaux pour la période
-  let totalQuery = supabaseAdmin
+  let totalQuery = dbAdmin
     .from('transactions')
     .select('amount, type')
     .eq('user_id', req.user.id)
@@ -238,7 +239,7 @@ router.get('/transactions/:id', authenticateToken, asyncHandler(async (req, res)
     throw new ValidationError('ID de transaction invalide');
   }
 
-  const { data: transaction, error } = await supabaseAdmin
+  const { data: transaction, error } = await dbAdmin
     .from('transactions')
     .select('*')
     .eq('id', transactionId)
@@ -258,6 +259,38 @@ router.get('/transactions/:id', authenticateToken, asyncHandler(async (req, res)
 }));
 
 /**
+ * GET /api/v1/wallet/search-user
+ * Rechercher un utilisateur par code ou par nom (utile pour le transfert P2P)
+ */
+router.get('/search-user', authenticateToken, asyncHandler(async (req, res) => {
+  const { q } = req.query;
+  if (!q || q.length < 2) {
+    return res.json({ success: true, data: { users: [] } });
+  }
+
+  // Chercher par userIdDisplay (code) ou full_name
+  const { data: users, error } = await dbAdmin
+    .from('users')
+    .select('id, full_name, user_id_display, avatar_url')
+    .or(`user_id_display.ilike.%${q}%,full_name.ilike.%${q}%`)
+    .limit(10);
+
+  if (error) {
+    logger.error('Erreur lors de la recherche user', { query: q, error });
+    throw new ValidationError('Erreur de requête lors de la recherche');
+  }
+
+  // Exclure soi-même
+  const filtered = (users || []).filter(u => u.id !== req.user.id);
+
+  res.json({
+    success: true,
+    data: { users: filtered }
+  });
+}));
+
+
+/**
  * POST /api/v1/wallet/transactions
  * Créer une nouvelle transaction
  */
@@ -273,7 +306,7 @@ router.post('/transactions', authenticateToken, asyncHandler(async (req, res) =>
   const transactionId = `TXN-${Date.now()}-${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
 
   // Créer la transaction
-  const { data: newTransaction, error: insertError } = await supabaseAdmin
+  const { data: newTransaction, error: insertError } = await dbAdmin
     .from('transactions')
     .insert({
       user_id: req.user.id,
@@ -310,6 +343,151 @@ router.post('/transactions', authenticateToken, asyncHandler(async (req, res) =>
     amount
   });
 
+  // --- INTÉGRATION PAYMENT OS ---
+  if (type === 'recharge' || type === 'withdrawal') {
+    try {
+      const paymentOsEndpoint = type === 'recharge' 
+        ? `${process.env.PAYMENT_OS_URL}/payments/deposits`
+        : `${process.env.PAYMENT_OS_URL}/payments/withdrawals`;
+
+      const fee = metadata?.fee || 0;
+      const totalAmount = amount + fee;
+
+      // Le DTO PaymentOS attend : amount, currency, provider, idempotencyKey et metadata
+      const payload = {
+        amount: totalAmount,
+        currency: metadata?.currency || 'XAF', // Peut être défini via le client mobile, sinon XAF
+        provider: 'SWYCHR', // L'agrégateur système attend 'SWYCHR' en majuscules pour initier le lien de paiement
+        idempotencyKey: transactionId,
+        metadata: {
+           internal_transaction_id: newTransaction.id,
+           user_id: req.user.id,
+           base_amount: amount,
+           fee: fee
+        }
+      };
+      
+      // SWYCHR require certains champs
+      if (metadata?.phone) payload.customerMobile = metadata.phone;
+      payload.customerName = metadata?.customerName || req.user.full_name || 'Mossombi User';
+      payload.customerEmail = metadata?.customerEmail || req.user.email || 'contact@mossombi.com';
+      payload.countryCode = metadata?.countryCode || 'CG'; // Par défaut Congo pour swychr
+      if (type === 'recharge') payload.passDigitalCharge = false;
+      
+      if (process.env.PAYMENT_OS_URL) {
+        const osRes = await axios.post(paymentOsEndpoint, payload, {
+          headers: {
+            'x-project-id': process.env.PAYMENT_OS_PROJECT_ID,
+            'x-api-key': process.env.PAYMENT_OS_API_KEY,
+            'Content-Type': 'application/json'
+          }
+        });
+        const checkoutUrl = osRes.data?.paymentIntent?.checkoutUrl;
+        logger.info('PaymentOS initié avec succès', { transactionId, checkoutUrl });
+        
+        // On récupère l'URL de paiement s'il y en a une pour l'afficher sur le téléphone !
+        if (checkoutUrl) {
+           newTransaction.checkoutUrl = checkoutUrl;
+        }
+      } else {
+        logger.warn('PAYMENT_OS_URL non configuré, la transaction restera en attente locale', { transactionId });
+      }
+    } catch (paymentOsError) {
+      logger.error('Erreur lors de la notification de PaymentOS', { 
+        transactionId, 
+        error: paymentOsError.response?.data || paymentOsError.message 
+      });
+      // On logue l'erreur mais on ne bloque pas la réponse backend au client mobile (elle reste pending)
+    }
+  }
+  // --- FIN INTÉGRATION PAYMENT OS ---
+
+  // --- INTEGRATION TRANSFERT P2P INTERNE ---
+  if (type === 'transfer') {
+    if (!recipient_id) throw new ValidationError('L\'ID du destinataire est requis pour un transfert P2P');
+    if (recipient_id === req.user.id) throw new ValidationError('Impossible de se transférer de l\'argent à soi-même');
+
+    // Vérifier Solde Expéditeur
+    const { data: senderWallet } = await dbAdmin.from('user_wallets').select('balance').eq('user_id', req.user.id).single();
+    if (!senderWallet || senderWallet.balance < amount) {
+       await dbAdmin.from('transactions').update({ status: 'failed', updated_at: new Date().toISOString() }).eq('id', newTransaction.id);
+       throw new ValidationError('Solde du portefeuille insuffisant pour effectuer ce transfert');
+    }
+
+    // Déduire Expéditeur
+    await dbAdmin.from('user_wallets')
+      .update({ balance: senderWallet.balance - amount, last_transaction_at: new Date().toISOString() })
+      .eq('user_id', req.user.id);
+
+    // Valider Transaction Expéditeur
+    newTransaction.status = 'completed';
+    await dbAdmin.from('transactions').update({ status: 'completed', updated_at: new Date().toISOString() }).eq('id', newTransaction.id);
+
+    // Récupérer Infos Expéditeur
+    const { data: senderUser } = await dbAdmin.from('users').select('full_name').eq('id', req.user.id).single();
+    const senderName = senderUser?.full_name || 'un utilisateur';
+
+    // Créer Transaction Virtuelle Réception (Destinataire)
+    const receiverTxId = `TXN-${Date.now()}-${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
+    await dbAdmin.from('transactions').insert({
+      user_id: recipient_id,
+      transaction_id: receiverTxId,
+      type: 'transfer', // Reçu
+      amount: amount,
+      description: `Transfert reçu de ${senderName}`,
+      status: 'completed',
+      metadata: { sender_id: req.user.id },
+      created_at: new Date().toISOString()
+    });
+
+    // Créditer Destinataire
+    const { data: receiverWallet } = await dbAdmin.from('user_wallets').select('balance').eq('user_id', recipient_id).single();
+    if (receiverWallet) {
+       await dbAdmin.from('user_wallets')
+         .update({ balance: (receiverWallet.balance || 0) + amount, last_transaction_at: new Date().toISOString() })
+         .eq('user_id', recipient_id);
+    }
+    logger.info('Transfert P2P réussi', { sender_id: req.user.id, recipient_id, amount });
+  }
+  // --- FIN TRANSFERT INTERNE ---
+
+  // --- INTEGRATION PAIEMENTS SERVICES (Factures, Crédits, Cartes Virtuelles, Marketplace) ---
+  if (type === 'bill_payment' || type === 'mobile_topup' || type === 'virtual_card_funding' || type === 'savings_deposit' || type === 'marketplace_payment') {
+    // Vérifier Solde Expéditeur
+    const { data: senderWallet } = await dbAdmin.from('user_wallets').select('balance').eq('user_id', req.user.id).single();
+    if (!senderWallet || senderWallet.balance < amount) {
+       await dbAdmin.from('transactions').update({ status: 'failed', updated_at: new Date().toISOString() }).eq('id', newTransaction.id);
+       throw new ValidationError('Solde du portefeuille insuffisant pour cette opération');
+    }
+
+    // Déduire Expéditeur (Dépense)
+    await dbAdmin.from('user_wallets')
+      .update({ balance: senderWallet.balance - amount, last_transaction_at: new Date().toISOString() })
+      .eq('user_id', req.user.id);
+
+    // Valider Transaction (instantané)
+    newTransaction.status = 'completed';
+    await dbAdmin.from('transactions').update({ status: 'completed', updated_at: new Date().toISOString() }).eq('id', newTransaction.id);
+    logger.info('Paiement service réussi', { user_id: req.user.id, type, amount });
+  }
+  // --- FIN PAIEMENTS SERVICES ---
+
+  // --- INTEGRATION RETRAIT EPARGNE (Savings Withdraw) ---
+  if (type === 'savings_withdraw') {
+    // Ajouter l'argent de l'épargne de retour au solde principal
+    const { data: senderWallet } = await dbAdmin.from('user_wallets').select('balance').eq('user_id', req.user.id).single();
+    if (senderWallet) {
+      await dbAdmin.from('user_wallets')
+        .update({ balance: senderWallet.balance + amount, last_transaction_at: new Date().toISOString() })
+        .eq('user_id', req.user.id);
+      
+      newTransaction.status = 'completed';
+      await dbAdmin.from('transactions').update({ status: 'completed', updated_at: new Date().toISOString() }).eq('id', newTransaction.id);
+      logger.info('Retrait depuis épargne réussi', { user_id: req.user.id, amount });
+    }
+  }
+  // --- FIN RETRAIT EPARGNE ---
+
   res.json({
     success: true,
     message: 'Transaction créée avec succès',
@@ -328,7 +506,7 @@ router.get('/stats', authenticateToken, asyncHandler(async (req, res) => {
   const thirtyDaysAgo = new Date();
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
-  const { data: transactions } = await supabaseAdmin
+  const { data: transactions } = await dbAdmin
     .from('transactions')
     .select('type, amount, status, created_at')
     .eq('user_id', req.user.id)
@@ -352,7 +530,7 @@ router.get('/stats', authenticateToken, asyncHandler(async (req, res) => {
 
     // Calculer revenus/dépenses
     if (transaction.status === 'completed') {
-      if (['recharge', 'refund', 'bonus'].includes(transaction.type)) {
+      if (['recharge', 'refund', 'bonus', 'transfer_received', 'savings_withdraw'].includes(transaction.type)) {
         stats.total_income += transaction.amount;
       } else {
         stats.total_expense += transaction.amount;
@@ -389,6 +567,86 @@ router.get('/stats', authenticateToken, asyncHandler(async (req, res) => {
       statistics: stats
     }
   });
+}));
+
+/**
+ * POST /api/v1/wallet/payment-webhook
+ * Webhook appelé par PaymentOS pour notifier d'un changement de statut de transaction
+ */
+router.post('/payment-webhook', asyncHandler(async (req, res) => {
+  const { idempotencyKey, status, amount, type } = req.body;
+  
+  if (!idempotencyKey || !status) {
+     return res.status(400).json({ success: false, message: 'Invalid payload, missing idempotencyKey or status' });
+  }
+
+  // 1. Chercher la transaction locale par transaction_id (qui est notre idempotencyKey)
+  const { data: transaction } = await dbAdmin
+    .from('transactions')
+    .select('*')
+    .eq('transaction_id', idempotencyKey)
+    .single();
+
+  if (!transaction) {
+     return res.status(404).json({ success: false, message: 'Transaction not found locally' });
+  }
+
+  // Nettoyage du statut en minuscules (ex: SUCCESS -> completed, FAILED -> failed)
+  const incomingStatus = status.toLowerCase();
+  const finalStatus = (incomingStatus === 'success' || incomingStatus === 'completed') ? 'completed' 
+                    : (incomingStatus === 'failed' || incomingStatus === 'cancelled') ? 'failed' 
+                    : 'pending';
+
+  // 2. Ne pas re-traiter une transaction achevée
+  if (transaction.status === finalStatus) {
+     return res.json({ success: true, message: 'Transaction already processed or unmodified' });
+  }
+
+  // 3. Mettre à jour le statut
+  await dbAdmin
+    .from('transactions')
+    .update({ status: finalStatus, updated_at: new Date().toISOString() })
+    .eq('id', transaction.id);
+
+  // 4. Mettre à jour le solde sur 'user_wallets' et éventuellement 'users(points)' en cas de SUCCES
+  if (finalStatus === 'completed') {
+    const { data: wallet } = await dbAdmin
+      .from('user_wallets')
+      .select('balance')
+      .eq('user_id', transaction.user_id)
+      .single();
+
+    if (wallet) {
+      let newBalance = Number(wallet.balance) || 0;
+      const txAmount = Number(transaction.amount) || 0;
+
+      // Un dépôt (topup/recharge) valide augmente le solde
+      if (transaction.type === 'recharge' || transaction.type === 'bonus') {
+         newBalance += txAmount;
+      } 
+      // Un retrait (withdrawal) validé a généralement déjà soustrait le solde sur d'autres systèmes, 
+      // MAIS s'il n'avait pas été déduit, on le fait ici.
+      // Dans notre app, on a présumé que le solde ne bouge QUE sur fetchWalletData.
+      else if (transaction.type === 'withdrawal' || transaction.type === 'transfer' || transaction.type === 'payment') {
+         newBalance -= txAmount;
+      }
+
+      await dbAdmin
+        .from('user_wallets')
+        .update({ balance: newBalance, last_transaction_at: new Date().toISOString() })
+        .eq('user_id', transaction.user_id);
+    }
+  } else if (finalStatus === 'failed') {
+    // Si c'est un échec, dans certains workflows, on rembourserait le solde déduit de manière optimiste
+    // si un retrait a été invalidé.
+  }
+
+  logger.info(`Webhook PaymentOS traité - Nouveau Status: ${finalStatus}`, { 
+    internalTxId: transaction.id, 
+    idempotencyKey 
+  });
+
+  res.json({ success: true, message: 'Webhook successfully processed' });
 }));
 
 export default router;

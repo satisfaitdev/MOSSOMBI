@@ -12,6 +12,7 @@ import { SearchBar, DatePicker, Counter, RatingDisplay, PriceDisplay, EmptyState
 import { SearchLayout } from '@/components/templates';
 import { BookingModal, BookingResultCard, TripTypeFilters, ClassFilters } from '@/components/organisms';
 import Button from '@/components/Button';
+import GradientBackground from '@/components/atoms/GradientBackground';
 
 interface Flight {
   id: string;
@@ -272,7 +273,7 @@ export default function FlightBookingScreen() {
   );
 
   return (
-    <>
+    <GradientBackground style={{ flex: 1 }} opacity="10">
       <HeaderWithBackButton title="Réservation de vol" />
       <SearchLayout
         searchBar={renderSearchBar()}
@@ -296,6 +297,6 @@ export default function FlightBookingScreen() {
       />
       {renderBookingModal()}
       {renderSuccessModal()}
-    </>
+    </GradientBackground>
   );
 }

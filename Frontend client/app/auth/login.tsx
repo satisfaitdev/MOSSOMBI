@@ -4,9 +4,9 @@ import { useRouter } from 'expo-router';
 import { Eye, EyeOff, Lock, HelpCircle } from 'lucide-react-native';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useLanguage } from '@/contexts/LanguageContext';
-import { SPACING, BORDER_RADIUS, TYPOGRAPHY } from '@/constants/colors';
-import { Heading, Body, Caption } from '@/components/atoms';
+import { SPACING, BORDER_RADIUS } from '@/constants/colors';
 import { Stack, Row } from '@/components/ui';
+import { AdaptiveCard, AdaptiveText } from '@/components/ui';
 import { PageContainer } from '@/components/layouts';
 import Button from '@/components/Button';
 import Input from '@/components/Input';
@@ -16,6 +16,7 @@ import AuthLogo from '@/components/AuthLogo';
 import { useAuth } from '@/contexts/AuthContext';
 import { apiService } from '@/services/api';
 import BaseModal from '@/components/organisms/modals/BaseModal';
+import AuthPageLayout from '@/components/layouts/AuthPageLayout';
 
 export default function LoginScreen() {
   const { colors } = useTheme();
@@ -166,22 +167,31 @@ export default function LoginScreen() {
   };
 
   return (
-    <KeyboardAvoidingView
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      style={{ flex: 1, backgroundColor: colors.background }}
-    >
-      <PageContainer>
-        <Stack spacing="lg" style={{ alignItems: 'center', marginTop: SPACING.xl }}>
-          <AuthLogo size={120} />
+    <AuthPageLayout title={t('loginTitle' as any)}>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={{ flex: 1, backgroundColor: 'transparent' }}
+      >
+        <PageContainer style={{ backgroundColor: 'transparent' }}>
+        <Stack spacing="md" style={{ alignItems: 'center', marginTop: SPACING.lg }}>
+          <AuthLogo size={96} />
           <Stack spacing="xs" style={{ alignItems: 'center' }}>
-            <Heading level={1}>{t('loginTitle' as any)}</Heading>
-            <Caption style={{ textAlign: 'center' }}>
+            <AdaptiveText variant="display" weight="bold" style={{ textAlign: 'center' }}>
+              {t('loginTitle' as any)}
+            </AdaptiveText>
+            <AdaptiveText variant="caption" weight="regular" style={{ textAlign: 'center' }}>
               {t('loginTitle' as any) === 'Login' ? 'Sign in to your account' : 'Connectez-vous à votre compte'}
-            </Caption>
+            </AdaptiveText>
           </Stack>
         </Stack>
 
-        <Stack spacing="md" style={{ marginTop: SPACING.xl }}>
+        <AdaptiveCard
+          margin={0}
+          padding={Platform.select({ ios: 18, android: 16 })}
+          variant="elevated"
+          style={{ width: '100%', marginTop: SPACING.lg }}
+        >
+        <Stack spacing="md">
             <PhoneInput
               label={t('phoneNumber' as any)}
               value={phone}
@@ -218,16 +228,16 @@ export default function LoginScreen() {
                 padding: SPACING.md,
                 marginVertical: SPACING.xs
               }}>
-                <Body style={{ color: colors.error, textAlign: 'center' }}>
+                <AdaptiveText variant="body" weight="medium" color={colors.error} style={{ textAlign: 'center' }}>
                   {error}
-                </Body>
+                </AdaptiveText>
               </View>
             )}
             
             <Pressable onPress={() => router.push('/auth/forgot-password-step1' as any)} style={{ alignSelf: 'flex-end' }}>
-              <Body style={{ color: colors.primary, fontWeight: TYPOGRAPHY.weights.medium }}>
+              <AdaptiveText variant="body" weight="medium" color={colors.primary}>
                 {t('forgotPassword' as any)}
-              </Body>
+              </AdaptiveText>
             </Pressable>
 
             <Button 
@@ -238,20 +248,23 @@ export default function LoginScreen() {
               disabled={!phone || !password || !phoneValid || !phoneExists} 
               fullWidth 
             />
-
-            <Row align="center" style={{ marginVertical: SPACING.md }}>
-              <View style={{ flex: 1, height: 1, backgroundColor: colors.border }} />
-              <Caption style={{ marginHorizontal: SPACING.sm }}>{t('or' as any)}</Caption>
-              <View style={{ flex: 1, height: 1, backgroundColor: colors.border }} />
-            </Row>
-
-            <Button 
-              title={t('createAccount' as any)} 
-              onPress={() => router.push('/auth/register-step1' as any)} 
-              variant="outline" 
-              fullWidth 
-            />
         </Stack>
+        </AdaptiveCard>
+
+        <Row align="center" style={{ marginTop: SPACING.md, marginBottom: SPACING.sm }}>
+          <View style={{ flex: 1, height: 1, backgroundColor: colors.border }} />
+          <AdaptiveText variant="caption" weight="regular" style={{ marginHorizontal: SPACING.sm }}>
+            {t('or' as any)}
+          </AdaptiveText>
+          <View style={{ flex: 1, height: 1, backgroundColor: colors.border }} />
+        </Row>
+
+        <Button 
+          title={t('createAccount' as any)} 
+          onPress={() => router.push('/auth/register-step1' as any)} 
+          variant="secondary" 
+          fullWidth 
+        />
 
         <Pressable 
           onPress={() => {
@@ -267,9 +280,11 @@ export default function LoginScreen() {
           }}
         >
           <HelpCircle size={16} color={colors.textSecondary} />
-          <Caption>{t('needHelp' as any)}</Caption>
+          <AdaptiveText variant="caption" weight="regular" color={colors.textSecondary}>
+            {t('needHelp' as any)}
+          </AdaptiveText>
         </Pressable>
-      </PageContainer>
+        </PageContainer>
 
       {/* Modal de vérification 2FA (pattern BaseModal comme recharge/success) */}
       <BaseModal
@@ -316,23 +331,24 @@ export default function LoginScreen() {
                       alignItems: 'center',
                     }}
                   >
-                    <Caption style={{
-                      color: isActive ? colors.primary : colors.textSecondary,
-                      fontWeight: TYPOGRAPHY.weights.medium,
-                    }}>
+                    <AdaptiveText
+                      variant="caption"
+                      weight="medium"
+                      color={isActive ? colors.primary : colors.textSecondary}
+                    >
                       {label}
-                    </Caption>
+                    </AdaptiveText>
                   </Pressable>
                 );
               })}
             </Row>
           )}
 
-          <Caption style={{ textAlign: 'center', color: colors.textSecondary }}>
+          <AdaptiveText variant="caption" weight="regular" color={colors.textSecondary} style={{ textAlign: 'center' }}>
             {selectedMethod === 'authenticator'
               ? 'Saisissez le code à 6 chiffres généré par votre application Authenticator.'
               : `Saisissez le code à 6 chiffres reçu au ${getMaskedPhoneForWhatsApp()} sur WhatsApp.`}
-          </Caption>
+          </AdaptiveText>
 
           <Input
             label={`Code 2FA (${methodLabel})`}
@@ -365,12 +381,12 @@ export default function LoginScreen() {
                 onPress={sendWhatsAppLoginCode}
                 style={{ alignSelf: 'center', marginTop: SPACING.xs }}
               >
-                <Caption style={{ color: colors.primary, textDecorationLine: 'underline' }}>
+                <AdaptiveText variant="caption" weight="medium" color={colors.primary} style={{ textDecorationLine: 'underline' }}>
                   Renvoyer le code
-                </Caption>
-                <Caption style={{ color: colors.textSecondary, fontSize: 11, marginTop: 2 }}>
+                </AdaptiveText>
+                <AdaptiveText variant="caption" weight="regular" color={colors.textSecondary} style={{ fontSize: 11, marginTop: 2 }}>
                   Maximum 3 envois par tentative de connexion
-                </Caption>
+                </AdaptiveText>
               </Pressable>
             )}
 
@@ -382,7 +398,9 @@ export default function LoginScreen() {
               }}
               style={{ alignSelf: 'center', marginTop: SPACING.xs }}
             >
-              <Caption style={{ color: colors.textSecondary }}>Annuler</Caption>
+              <AdaptiveText variant="caption" weight="regular" color={colors.textSecondary}>
+                Annuler
+              </AdaptiveText>
             </Pressable>
           </Stack>
         </Stack>
@@ -390,6 +408,7 @@ export default function LoginScreen() {
 
       {/* Popup de chargement pour la connexion */}
       <LoadingPopup visible={isAuthenticating} />
-    </KeyboardAvoidingView>
+      </KeyboardAvoidingView>
+    </AuthPageLayout>
   );
 }

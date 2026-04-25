@@ -14,6 +14,7 @@ import { SearchLayout } from '@/components/templates';
 import { BookingModal, BookingResultCard, TripTypeFilters } from '@/components/organisms';
 import Button from '@/components/Button';
 import Input from '@/components/Input';
+import GradientBackground from '@/components/atoms/GradientBackground';
 
 interface BusTrip {
   id: string;
@@ -116,7 +117,7 @@ export default function BusBookingScreen() {
   );
 
   return (
-    <>
+    <GradientBackground style={{ flex: 1 }} opacity="10">
       <HeaderWithBackButton title="Réservation de bus" />
       <SearchLayout searchBar={renderSearchBar()} topFilters={renderTopFilters()} filters={renderFilters()} results={filteredBuses} renderItem={renderBusCard} loading={isLoading} emptyState={<EmptyState title="Aucun bus trouvé" message="Essayez de modifier vos critères" actionLabel="Réinitialiser" onAction={() => { setSearchQuery(''); setBusType('all'); }} />} />
       <BookingModal
@@ -137,6 +138,6 @@ export default function BusBookingScreen() {
         size="lg"
       />
       <SuccessModal visible={showSuccessModal} onClose={() => { setShowSuccessModal(false); setSelectedBus(null); }} title="Bus réservé !" message={`Votre billet pour le bus ${selectedBus?.busNumber} a été réservé.`} animation="confetti" autoClose buttonLabel="Voir mes réservations" />
-    </>
+    </GradientBackground>
   );
 }

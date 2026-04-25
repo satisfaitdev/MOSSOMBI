@@ -1,13 +1,12 @@
-import { Stack, useRouter } from "expo-router";
-import React, { useEffect } from "react";
-import { View } from "react-native";
-import { useTheme } from "@/contexts/ThemeContext";
-import { useAuth } from "@/contexts/AuthContext";
-import LoadingPopup from "@/components/LoadingPopup";
-import BottomNav from "@/components/organisms/BottomNav";
+import { useRouter } from 'expo-router';
+import { Icon, Label, NativeTabs } from 'expo-router/unstable-native-tabs';
+import React, { useEffect } from 'react';
+import { useTheme } from '@/contexts/ThemeContext';
+import { useAuth } from '@/contexts/AuthContext';
+import LoadingPopup from '@/components/LoadingPopup';
 
 export default function CustomTabLayout() {
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
   const { isAuthenticated, isLoading } = useAuth();
   const router = useRouter();
 
@@ -29,25 +28,41 @@ export default function CustomTabLayout() {
   }
 
   return (
-    <View style={{ flex: 1 }}>
-      {/* Contenu des pages */}
-      <Stack
-        screenOptions={{
-          headerShown: false,
-          contentStyle: { 
-            paddingBottom: 0,
-          },
-        }}
-      >
-        <Stack.Screen name="index" />
-        <Stack.Screen name="wallet" />
-        <Stack.Screen name="services" />
-        <Stack.Screen name="orders" />
-        <Stack.Screen name="profile" />
-      </Stack>
+    <NativeTabs
+      blurEffect={isDark ? 'systemMaterialDark' : 'systemMaterial'}
+      backgroundColor={null}
+      disableIndicator
+      disableTransparentOnScrollEdge
+      minimizeBehavior="onScrollDown"
+      tintColor={colors.gradient.start}
+      iconColor={colors.tabIconDefault}
+      labelStyle={{
+        fontSize: 10,
+        fontWeight: '500',
+        color: colors.tabIconDefault,
+      }}
+    >
+      <NativeTabs.Trigger name="index">
+        <Label>Accueil</Label>
+        <Icon sf="house.fill" />
+      </NativeTabs.Trigger>
 
-      {/* Bottom Navigation custom */}
-      <BottomNav />
-    </View>
+      <NativeTabs.Trigger name="services">
+        <Label>Services</Label>
+        <Icon sf="square.grid.2x2.fill" />
+      </NativeTabs.Trigger>
+
+      <NativeTabs.Trigger name="orders">
+        <Label>Commandes</Label>
+        <Icon sf="bag.fill" />
+      </NativeTabs.Trigger>
+
+      <NativeTabs.Trigger name="profile">
+        <Label>Profil</Label>
+        <Icon sf="person.fill" />
+      </NativeTabs.Trigger>
+
+      <NativeTabs.Trigger name="wallet" hidden />
+    </NativeTabs>
   );
 }

@@ -1,4 +1,3 @@
-
 require('dotenv/config');
 
 module.exports = {
@@ -22,7 +21,8 @@ module.exports = {
       supportsTablet: true,
       bundleIdentifier: "com.mossombi.app",
       infoPlist: {
-        NSFaceIDUsageDescription: "Mossombi utilise Face ID pour sécuriser votre compte et vos transactions financières."
+        NSFaceIDUsageDescription: "Mossombi utilise Face ID pour sécuriser votre compte et vos transactions financières.",
+        NSLocationWhenInUseUsageDescription: "Mossombi utilise votre position pour configurer automatiquement la devise et les services adaptés à votre pays."
       }
     },
     android: {
@@ -30,7 +30,8 @@ module.exports = {
         foregroundImage: "./assets/images/android-adaptive-icon.png",
         backgroundColor: "#ffffff"
       },
-      package: "com.mossombi.app"
+      package: "com.mossombi.app",
+      permissions: ["ACCESS_FINE_LOCATION", "ACCESS_COARSE_LOCATION"]
     },
     web: {
       bundler: "metro",
@@ -41,6 +42,7 @@ module.exports = {
       "expo-router",
       "expo-splash-screen",
       "expo-local-authentication",
+      "expo-location",
       [
         "expo-notifications",
         {
@@ -55,13 +57,13 @@ module.exports = {
     },
     extra: {
       // Variables d'environnement sécurisées
-      apiBaseUrl: process.env.API_BASE_URL,
+      apiBaseUrl: process.env.EXPO_PUBLIC_API_BASE_URL || process.env.API_BASE_URL,
       appName: process.env.APP_NAME,
       appVersion: process.env.APP_VERSION,
       environment: process.env.APP_ENVIRONMENT,
       // Configuration EAS pour les notifications
       eas: {
-        projectId: "550e8400-e29b-41d4-a716-446655440000"
+        projectId: "69b7dbc9-515f-4316-a0a7-b8ef5cbb376c"
       }
     }
   }

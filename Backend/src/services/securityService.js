@@ -6,6 +6,7 @@
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
+import { AuthenticationError } from '../middleware/errorHandler.js';
 
 // Clé secrète pour JWT (à mettre dans .env en production)
 const JWT_SECRET = process.env.JWT_SECRET || crypto.randomBytes(64).toString('hex');
@@ -72,7 +73,19 @@ class SecurityService {
         audience: 'mossombi-app'
       });
     } catch (error) {
-      throw new Error(`Token invalide: ${error.message}`);
+      if (error?.name === 'TokenExpiredError') {
+        const authError = new AuthenticationError('Token expiré');
+        authError.code = 'TOKEN_EXPIRED';
+        throw authError;
+      }
+
+      if (error?.name === 'JsonWebTokenError') {
+        const authError = new AuthenticationError('Token invalide');
+        authError.code = 'TOKEN_INVALID';
+        throw authError;
+      }
+
+      throw error;
     }
   }
 

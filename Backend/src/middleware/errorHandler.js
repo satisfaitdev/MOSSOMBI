@@ -71,7 +71,7 @@ export const errorHandler = (err, req, res, next) => {
     query: req.query
   });
 
-  // Erreurs Supabase
+  // Erreurs PostgREST
   if (err.code === 'PGRST116') {
     error = new NotFoundError('Ressource non trouvée');
   }

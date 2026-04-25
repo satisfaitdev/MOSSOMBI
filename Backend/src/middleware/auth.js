@@ -1,12 +1,13 @@
 /**
  * MIDDLEWARE D'AUTHENTIFICATION
- * Gestion de l'authentification JWT et Supabase
+ * Gestion de l'authentification JWT
  */
 
 import jwt from 'jsonwebtoken';
-import { supabaseAdmin } from '../config/supabase.js';
+import { dbAdmin } from '../config/db.js';
 import { AuthenticationError, AuthorizationError } from './errorHandler.js';
 import { logger } from '../utils/logger.js';
+import SecurityService from '../services/securityService.js';
 
 // Middleware pour vérifier le token JWT
 export const authenticateToken = async (req, res, next) => {
@@ -18,23 +19,19 @@ export const authenticateToken = async (req, res, next) => {
       throw new AuthenticationError('Token d\'accès requis');
     }
 
-    // Vérifier le token avec Supabase
-    const { data: { user }, error } = await supabaseAdmin.auth.getUser(token);
-
-    if (error || !user) {
-      throw new AuthenticationError('Token invalide ou expiré');
-    }
+    // Vérifier le token JWT local
+    const decoded = SecurityService.verifyToken(token);
 
     // Récupérer les données utilisateur complètes
-    const { data: userData, error: userError } = await supabaseAdmin
+    const { data: userData, error: userError } = await dbAdmin
       .from('users')
       .select('*')
-      .eq('id', user.id)
+      .eq('id', decoded.userId)
       .single();
 
     if (userError) {
       logger.error('Erreur lors de la récupération des données utilisateur', {
-        userId: user.id,
+        userId: decoded.userId,
         error: userError
       });
       throw new AuthenticationError('Utilisateur non trouvé');
@@ -47,11 +44,13 @@ export const authenticateToken = async (req, res, next) => {
 
     // Ajouter les données utilisateur à la requête
     req.user = {
-      id: user.id,
-      email: user.email,
+      id: userData.id,
+      email: userData.email,
       phone: userData.phone,
       full_name: userData.full_name,
       user_level: userData.user_level,
+      role: userData.role,
+      is_super_admin: userData.is_super_admin,
       points: userData.points,
       is_verified: userData.is_verified,
       metadata: userData.metadata,
@@ -59,10 +58,10 @@ export const authenticateToken = async (req, res, next) => {
     };
 
     // Mettre à jour la dernière activité
-    await supabaseAdmin
+    await dbAdmin
       .from('users')
       .update({ last_login_at: new Date().toISOString() })
-      .eq('id', user.id);
+      .eq('id', decoded.userId);
 
     next();
   } catch (error) {
@@ -128,26 +127,23 @@ export const optionalAuth = async (req, res, next) => {
     }
 
     // Même logique que authenticateToken mais sans échouer
-    const { data: { user }, error } = await supabaseAdmin.auth.getUser(token);
+    const decoded = SecurityService.verifyToken(token);
 
-    if (error || !user) {
-      req.user = null;
-      return next();
-    }
-
-    const { data: userData } = await supabaseAdmin
+    const { data: userData } = await dbAdmin
       .from('users')
       .select('*')
-      .eq('id', user.id)
+      .eq('id', decoded.userId)
       .single();
 
     if (userData && userData.is_active) {
       req.user = {
-        id: user.id,
-        email: user.email,
+        id: userData.id,
+        email: userData.email,
         phone: userData.phone,
         full_name: userData.full_name,
         user_level: userData.user_level,
+        role: userData.role,
+        is_super_admin: userData.is_super_admin,
         points: userData.points,
         is_verified: userData.is_verified,
         metadata: userData.metadata,

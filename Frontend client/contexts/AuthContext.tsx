@@ -96,9 +96,12 @@ export function AuthProvider({ children }: AuthProviderProps) {
             
             if (response.success && response.data) {
               // Token valide, mettre à jour si nécessaire
-              if (JSON.stringify(storedUser) !== JSON.stringify(response.data.user)) {
-                setUser(response.data.user);
-                await AsyncStorage.setItem('user', JSON.stringify(response.data.user));
+              const nextUser = (response.data as any)?.user;
+              if (nextUser && JSON.stringify(storedUser) !== JSON.stringify(nextUser)) {
+                setUser(nextUser);
+                await AsyncStorage.setItem('user', JSON.stringify(nextUser));
+              } else if (!nextUser) {
+                await AsyncStorage.removeItem('user');
               }
             } else {
               // Token invalide - déconnecter
@@ -144,7 +147,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       router.replace('/auth/login');
     } else if (isAuthenticated && inAuthGroup) {
       // Utilisateur connecté mais sur les pages d'auth -> rediriger vers l'accueil
-      router.replace('/(tabs)');
+      router.replace('/(tabs)' as any);
     }
   }, [isAuthenticated, isLoading, segments, router]);
 
@@ -218,7 +221,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       setIsAuthenticating(true);
       setError(null);
 
-      const response = await apiService.verifyLogin2FA({
+      const response = await apiService.verifyTwoFactorLogin({
         challenge_id: challengeId,
         method,
         code,
@@ -345,8 +348,13 @@ export function AuthProvider({ children }: AuthProviderProps) {
       const response = await apiService.updateProfile(data);
       
       if (response.success && response.data) {
-        setUser(response.data.user);
-        await AsyncStorage.setItem('user', JSON.stringify(response.data.user));
+        const nextUser = (response.data as any)?.user;
+        setUser(nextUser || null);
+        if (nextUser) {
+          await AsyncStorage.setItem('user', JSON.stringify(nextUser));
+        } else {
+          await AsyncStorage.removeItem('user');
+        }
         return { success: true };
       } else {
         return { success: false, error: response.error };

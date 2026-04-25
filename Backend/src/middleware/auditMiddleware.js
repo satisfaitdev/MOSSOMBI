@@ -11,6 +11,10 @@ import { logger } from '../utils/logger.js';
  * Middleware principal d'audit
  */
 export const auditMiddleware = (req, res, next) => {
+  if (process.env.NODE_ENV === 'test') {
+    return next();
+  }
+
   const startTime = Date.now();
   
   // Capturer les informations de la requête

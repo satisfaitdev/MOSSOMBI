@@ -3,22 +3,23 @@
  * Composant avec détection automatique du pays et formatage
  */
 
-import React, { useState, useEffect, useRef } from 'react';
-import { View, TextInput, Text, Pressable, Modal, FlatList, ActivityIndicator, Platform } from 'react-native';
-import { Check, ChevronDown, X, Loader, Phone, CheckCircle } from 'lucide-react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { View, TextInput, Platform } from 'react-native';
+import { Phone, CheckCircle } from 'lucide-react-native';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { SPACING, BORDER_RADIUS, TYPOGRAPHY } from '@/constants/colors';
-import { getCountryInfo } from '@/utils/localization';
 import CountryPicker, { COUNTRIES, Country } from './CountryPicker';
 import { useAuth } from '@/contexts/AuthContext';
+import { AdaptiveText } from '@/components/ui/AdaptiveText';
+import { GlassContainer } from '@/components/ui/GlassContainer';
 
 interface PhoneInputProps {
   label?: string;
   value: string;
   onChangeText: (value: string) => void;
   onCountryChange?: (country: Country) => void;
-  onPhoneValidation?: (isValid: boolean, exists: boolean) => void;
+  onPhoneValidation?: (isValid: boolean, exists: boolean, isVerified?: boolean | null) => void;
   placeholder?: string;
   disabled?: boolean;
   error?: string;
@@ -141,18 +142,24 @@ export default function PhoneInput({
   onChangeText, 
   onCountryChange,
   onPhoneValidation,
-  placeholder = "Entrez votre numéro",
   disabled = false,
   error,
   countrySelectable = true,
   mode = 'register'
 }: PhoneInputProps) {
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
   const { t } = useLanguage();
   const { checkPhoneExists } = useAuth();
   const [selectedCountry, setSelectedCountry] = useState<Country>(() => detectCountry()); // Initialisation directe
   const [localNumber, setLocalNumber] = useState('');
   const [phoneStatus, setPhoneStatus] = useState<'idle' | 'checking' | 'available' | 'exists'>('idle');
+  const [isFocused, setIsFocused] = useState(false);
+  const checkCacheRef = useRef<
+    Map<string, { success: boolean; exists: boolean; isVerified: boolean | null }>
+  >(new Map());
+  const inFlightRef = useRef<Set<string>>(new Set());
+  const lastCheckedRef = useRef<string | null>(null);
+  const rateLimitUntilRef = useRef<number>(0);
 
   // Notifier le changement de pays initial
   useEffect(() => {
@@ -189,9 +196,9 @@ export default function PhoneInput({
 
   // Vérifier le numéro avec debounce
   useEffect(() => {
-    if (!localNumber || localNumber.length < 8) {
+    if (!localNumber || localNumber.length < 9) {
       setPhoneStatus('idle');
-      onPhoneValidation?.(false, false);
+      onPhoneValidation?.(false, false, null);
       return;
     }
 
@@ -199,30 +206,88 @@ export default function PhoneInput({
     
     // Debounce de 1 seconde
     const timeoutId = setTimeout(async () => {
-      setPhoneStatus('checking');
-      
-      try {
-        const result = await checkPhoneExists(fullNumber);
-        
-        if (result.success) {
-          // Un compte existe vraiment seulement s'il est vérifié
-          const accountReallyExists = result.exists && result.data?.is_verified;
-          
-          if (accountReallyExists) {
-            setPhoneStatus('exists');
-            onPhoneValidation?.(true, true);
+      const now = Date.now();
+      if (now < rateLimitUntilRef.current) {
+        return;
+      }
+
+      const cached = checkCacheRef.current.get(fullNumber);
+      if (cached) {
+        if (cached.success) {
+          if (cached.exists) {
+            const shouldBlockAsExists = mode === 'register' ? (cached.isVerified !== false) : true;
+            setPhoneStatus(shouldBlockAsExists ? 'exists' : 'available');
+            onPhoneValidation?.(true, true, cached.isVerified);
           } else {
             setPhoneStatus('available');
-            onPhoneValidation?.(true, false);
+            onPhoneValidation?.(true, false, null);
           }
         } else {
           setPhoneStatus('idle');
-          onPhoneValidation?.(false, false);
+          onPhoneValidation?.(false, false, null);
+        }
+        return;
+      }
+
+      if (inFlightRef.current.has(fullNumber)) {
+        return;
+      }
+
+      if (lastCheckedRef.current === fullNumber && phoneStatus !== 'idle') {
+        return;
+      }
+
+      setPhoneStatus('checking');
+      inFlightRef.current.add(fullNumber);
+      lastCheckedRef.current = fullNumber;
+      
+      try {
+        const result = await checkPhoneExists(fullNumber);
+
+        console.log('📞 PhoneInput check-phone result:', {
+          fullNumber,
+          success: result?.success,
+          exists: result?.exists,
+          data: result?.data,
+        });
+        
+        if (result.success) {
+          const accountReallyExists = !!result.exists;
+          const isVerified = (result.data as any)?.is_verified ?? null;
+
+          checkCacheRef.current.set(fullNumber, {
+            success: true,
+            exists: accountReallyExists,
+            isVerified,
+          });
+          
+          if (accountReallyExists) {
+            // En mode register: on bloque uniquement si le compte existe ET est actif.
+            // Si le compte existe mais n'est pas vérifié, on laisse continuer vers la vérification OTP.
+            // Important: si is_verified est NULL/undefined (données legacy), on considère le compte comme déjà vérifié.
+            const shouldBlockAsExists = mode === 'register' ? (isVerified !== false) : true;
+            setPhoneStatus(shouldBlockAsExists ? 'exists' : 'available');
+            onPhoneValidation?.(true, true, isVerified);
+          } else {
+            setPhoneStatus('available');
+            onPhoneValidation?.(true, false, null);
+          }
+        } else {
+          const err = (result as any)?.error ? String((result as any).error) : '';
+          if (err.toLowerCase().includes('trop de requêtes') || err.toLowerCase().includes('rate_limit')) {
+            rateLimitUntilRef.current = Date.now() + 15000;
+          }
+          checkCacheRef.current.set(fullNumber, { success: false, exists: false, isVerified: null });
+          setPhoneStatus('idle');
+          onPhoneValidation?.(false, false, null);
         }
       } catch (error) {
         console.log('Erreur vérification numéro:', error);
+        checkCacheRef.current.set(fullNumber, { success: false, exists: false, isVerified: null });
         setPhoneStatus('idle');
-        onPhoneValidation?.(false, false);
+        onPhoneValidation?.(false, false, null);
+      } finally {
+        inFlightRef.current.delete(fullNumber);
       }
     }, 1000);
 
@@ -240,153 +305,275 @@ export default function PhoneInput({
   };
 
   return (
-    <View style={{ marginBottom: SPACING.md }}>
+    <View style={{ marginBottom: SPACING.sm }}>
       {label && (
-        <Text style={{ 
-          color: colors.text, 
-          marginBottom: SPACING.xs,
-          fontWeight: TYPOGRAPHY.weights.medium,
-          fontSize: TYPOGRAPHY.sizes.sm
-        }}>
+        <AdaptiveText
+          variant="body"
+          weight="medium"
+          color={colors.text}
+          style={{
+            marginBottom: SPACING.xs,
+            fontSize: TYPOGRAPHY.sizes.sm,
+          }}
+        >
           {label}
-        </Text>
+        </AdaptiveText>
       )}
       
       <View style={{
         flexDirection: 'row',
         alignItems: 'center',
-        backgroundColor: colors.surface,
-        borderRadius: BORDER_RADIUS.md,
-        borderWidth: 1,
-        borderColor: error ? colors.error : colors.border,
-        paddingHorizontal: SPACING.md,
-        minHeight: 56, // Hauteur fixe pour éviter le redimensionnement
+        backgroundColor: Platform.OS === 'ios' ? 'transparent' : colors.surface,
+        borderRadius: BORDER_RADIUS.lg,
+        borderWidth: Platform.OS === 'ios' ? 1 : (isFocused ? 2 : 1),
+        borderColor: error ? colors.error : isFocused ? `${colors.primary}66` : colors.border,
+        paddingHorizontal: 0,
+        minHeight: 48,
       }}>
-        {/* Icône téléphone */}
-        <Phone size={20} color={colors.textSecondary} style={{ marginRight: SPACING.sm }} />
-        
-        {/* Sélecteur de pays - Version compacte ou complète */}
-        {countrySelectable ? (
-          <CountryPicker
-            selectedCountry={selectedCountry}
-            onCountrySelect={handleCountrySelect}
-            disabled={disabled}
-          />
+        {Platform.OS === 'ios' ? (
+          <GlassContainer
+            blur={isDark ? 75 : 60}
+            tint={isDark ? 'dark' : 'light'}
+            opacity={isDark ? 0.04 : 0.08}
+            borderRadius={BORDER_RADIUS.lg}
+            style={{
+              flex: 1,
+              paddingHorizontal: SPACING.md,
+            }}
+          >
+            <View style={{ flexDirection: 'row', alignItems: 'center', minHeight: 48 }}>
+              {/* Icône téléphone */}
+              <Phone size={20} color={colors.textSecondary} style={{ marginRight: SPACING.sm }} />
+              
+              {/* Sélecteur de pays - Version compacte ou complète */}
+              {countrySelectable ? (
+                <CountryPicker
+                  selectedCountry={selectedCountry}
+                  onCountrySelect={handleCountrySelect}
+                  disabled={disabled}
+                />
+              ) : (
+                // Version compacte non-modifiable - TRÈS RÉDUITE
+                <View style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  paddingHorizontal: SPACING.xs,
+                  paddingVertical: 2,
+                }}>
+                  <AdaptiveText
+                    variant="caption"
+                    weight="regular"
+                    style={{ fontSize: 12, marginRight: 2 }}
+                  >
+                    {selectedCountry.flag}
+                  </AdaptiveText>
+                  <AdaptiveText
+                    variant="caption"
+                    weight="medium"
+                    color={colors.textSecondary}
+                    style={{ fontSize: 11 }}
+                  >
+                    {selectedCountry.dialCode}
+                  </AdaptiveText>
+                </View>
+              )}
+              
+              {/* Séparateur - Plus petit */}
+              <View style={{
+                width: 1,
+                height: 20,
+                backgroundColor: colors.border,
+                marginHorizontal: SPACING.xs,
+              }} />
+              
+              {/* Input du numéro */}
+              <TextInput
+                style={{
+                  flex: 1,
+                  paddingVertical: SPACING.xs,
+                  color: colors.text,
+                  fontSize: TYPOGRAPHY.sizes.sm,
+                }}
+                value={localNumber}
+                onChangeText={handleNumberChange}
+                placeholder={getPhoneExample(selectedCountry)}
+                placeholderTextColor={colors.textTertiary || colors.textSecondary}
+                keyboardType="phone-pad"
+                editable={!disabled}
+                maxLength={selectedCountry.code === 'FR' ? 14 : 11} // Ajuster selon le pays
+                onFocus={() => setIsFocused(true)}
+                onBlur={() => setIsFocused(false)}
+              />
+              
+              {/* Indicateur de statut - Adapté selon le mode */}
+              {localNumber.length >= 8 && phoneStatus !== 'checking' && (
+                <View style={{ marginLeft: SPACING.sm }}>
+                  {phoneStatus === 'available' && (
+                    <CheckCircle 
+                      size={14} 
+                      color={mode === 'register' ? (colors.success || '#10B981') : colors.error} 
+                    />
+                  )}
+                  {phoneStatus === 'exists' && (
+                    <CheckCircle 
+                      size={14} 
+                      color={mode === 'register' ? colors.error : (colors.success || '#10B981')} 
+                    />
+                  )}
+                </View>
+              )}
+            </View>
+          </GlassContainer>
         ) : (
-          // Version compacte non-modifiable - TRÈS RÉDUITE
-          <View style={{
-            flexDirection: 'row',
-            alignItems: 'center',
-            paddingHorizontal: SPACING.xs,
-            paddingVertical: 2,
-          }}>
-            <Text style={{ fontSize: 12, marginRight: 2 }}>
-              {selectedCountry.flag}
-            </Text>
-            <Text style={{ 
-              color: colors.textSecondary, 
-              fontWeight: TYPOGRAPHY.weights.medium,
-              fontSize: 11
-            }}>
-              {selectedCountry.dialCode}
-            </Text>
-          </View>
-        )}
-        
-        {/* Séparateur - Plus petit */}
-        <View style={{
-          width: 1,
-          height: 20,
-          backgroundColor: colors.border,
-          marginHorizontal: SPACING.xs,
-        }} />
-        
-        {/* Input du numéro */}
-        <TextInput
-          style={{
-            flex: 1,
-            paddingVertical: SPACING.md,
-            color: colors.text,
-            fontSize: TYPOGRAPHY.sizes.md,
-          }}
-          value={localNumber}
-          onChangeText={handleNumberChange}
-          placeholder={getPhoneExample(selectedCountry)}
-          placeholderTextColor={colors.textSecondary}
-          keyboardType="phone-pad"
-          editable={!disabled}
-          maxLength={selectedCountry.code === 'FR' ? 14 : 11} // Ajuster selon le pays
-        />
-        
-        {/* Indicateur de statut - Adapté selon le mode */}
-        {localNumber.length >= 8 && phoneStatus !== 'checking' && (
-          <View style={{ marginLeft: SPACING.sm }}>
-            {phoneStatus === 'available' && (
-              <CheckCircle 
-                size={14} 
-                color={mode === 'register' ? (colors.success || '#10B981') : colors.error} 
+          <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1, paddingHorizontal: SPACING.md }}>
+            {/* Icône téléphone */}
+            <Phone size={20} color={colors.textSecondary} style={{ marginRight: SPACING.sm }} />
+            
+            {/* Sélecteur de pays - Version compacte ou complète */}
+            {countrySelectable ? (
+              <CountryPicker
+                selectedCountry={selectedCountry}
+                onCountrySelect={handleCountrySelect}
+                disabled={disabled}
               />
+            ) : (
+              // Version compacte non-modifiable - TRÈS RÉDUITE
+              <View style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                paddingHorizontal: SPACING.xs,
+                paddingVertical: 2,
+              }}>
+                <AdaptiveText
+                  variant="caption"
+                  weight="regular"
+                  style={{ fontSize: 12, marginRight: 2 }}
+                >
+                  {selectedCountry.flag}
+                </AdaptiveText>
+                <AdaptiveText
+                  variant="caption"
+                  weight="medium"
+                  color={colors.textSecondary}
+                  style={{ fontSize: 11 }}
+                >
+                  {selectedCountry.dialCode}
+                </AdaptiveText>
+              </View>
             )}
-            {phoneStatus === 'exists' && (
-              <CheckCircle 
-                size={14} 
-                color={mode === 'register' ? colors.error : (colors.success || '#10B981')} 
-              />
+            
+            {/* Séparateur - Plus petit */}
+            <View style={{
+              width: 1,
+              height: 20,
+              backgroundColor: colors.border,
+              marginHorizontal: SPACING.xs,
+            }} />
+            
+            {/* Input du numéro */}
+            <TextInput
+              style={{
+                flex: 1,
+                paddingVertical: SPACING.md,
+                color: colors.text,
+                fontSize: TYPOGRAPHY.sizes.md,
+              }}
+              value={localNumber}
+              onChangeText={handleNumberChange}
+              placeholder={getPhoneExample(selectedCountry)}
+              placeholderTextColor={colors.textTertiary || colors.textSecondary}
+              keyboardType="phone-pad"
+              editable={!disabled}
+              maxLength={selectedCountry.code === 'FR' ? 14 : 11} // Ajuster selon le pays
+              onFocus={() => setIsFocused(true)}
+              onBlur={() => setIsFocused(false)}
+            />
+            
+            {/* Indicateur de statut - Adapté selon le mode */}
+            {localNumber.length >= 8 && phoneStatus !== 'checking' && (
+              <View style={{ marginLeft: SPACING.sm }}>
+                {phoneStatus === 'available' && (
+                  <CheckCircle 
+                    size={14} 
+                    color={mode === 'register' ? (colors.success || '#10B981') : colors.error} 
+                  />
+                )}
+                {phoneStatus === 'exists' && (
+                  <CheckCircle 
+                    size={14} 
+                    color={mode === 'register' ? colors.error : (colors.success || '#10B981')} 
+                  />
+                )}
+              </View>
             )}
           </View>
         )}
       </View>
       
       {error && (
-        <Text style={{ 
-          color: colors.error, 
-          marginTop: SPACING.xs,
-          fontSize: TYPOGRAPHY.sizes.sm
-        }}>
+        <AdaptiveText
+          variant="caption"
+          weight="regular"
+          color={colors.error}
+          style={{
+            marginTop: SPACING.xs,
+            fontSize: TYPOGRAPHY.sizes.sm,
+          }}
+        >
           {error}
-        </Text>
+        </AdaptiveText>
       )}
       
       {/* Messages d'état selon le statut et le mode */}
       {phoneStatus === 'exists' && (
-        <Text style={{ 
-          color: mode === 'register' ? colors.error : (colors.success || '#10B981'), 
-          marginTop: 4,
-          fontSize: TYPOGRAPHY.sizes.xs,
-          fontWeight: TYPOGRAPHY.weights.medium
-        }}>
+        <AdaptiveText
+          variant="caption"
+          weight="medium"
+          color={mode === 'register' ? colors.error : (colors.success || '#10B981')}
+          style={{
+            marginTop: 4,
+            fontSize: TYPOGRAPHY.sizes.xs,
+          }}
+        >
           {mode === 'register' 
             ? t('phoneExistsRegister' as any)
             : t('phoneExistsLogin' as any)
           }
-        </Text>
+        </AdaptiveText>
       )}
       
       {phoneStatus === 'available' && (
-        <Text style={{ 
-          color: mode === 'register' ? (colors.success || '#10B981') : colors.error, 
-          marginTop: 4,
-          fontSize: TYPOGRAPHY.sizes.xs,
-          fontWeight: TYPOGRAPHY.weights.medium
-        }}>
+        <AdaptiveText
+          variant="caption"
+          weight="medium"
+          color={mode === 'register' ? (colors.success || '#10B981') : colors.error}
+          style={{
+            marginTop: 4,
+            fontSize: TYPOGRAPHY.sizes.xs,
+          }}
+        >
           {mode === 'register' 
             ? t('phoneAvailableRegister' as any)
             : t('phoneAvailableLogin' as any)
           }
-        </Text>
+        </AdaptiveText>
       )}
       
       
       {/* Indication du numéro complet (seulement si pas de message d'état) */}
       {localNumber && phoneStatus === 'idle' && (
-        <Text style={{ 
-          color: colors.textSecondary, 
-          marginTop: SPACING.xs,
-          fontStyle: 'italic',
-          fontSize: TYPOGRAPHY.sizes.sm
-        }}>
+        <AdaptiveText
+          variant="caption"
+          weight="regular"
+          color={colors.textSecondary}
+          style={{
+            marginTop: SPACING.xs,
+            fontStyle: 'italic',
+            fontSize: TYPOGRAPHY.sizes.sm,
+          }}
+        >
           {t('fullPhoneNumber' as any)} {getFullPhoneNumber(localNumber, selectedCountry)}
-        </Text>
+        </AdaptiveText>
       )}
     </View>
   );

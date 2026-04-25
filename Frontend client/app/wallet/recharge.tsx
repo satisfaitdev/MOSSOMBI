@@ -6,7 +6,6 @@
 import React, { useState, useCallback } from 'react';
 import { useRouter } from 'expo-router';
 import { View, Pressable, Modal, Text, TextInput, KeyboardAvoidingView, Platform } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useUserPreferences } from '@/contexts/UserPreferencesContext';
 import { SPACING, BORDER_RADIUS, TYPOGRAPHY } from '@/constants/colors';
@@ -14,7 +13,7 @@ import { formatCurrencyWithConversion, convertToXAF } from '@/utils/localization
 import { COMMON_STYLES } from '@/constants/styles';
 import { Heading, Body, Caption } from '@/components/atoms';
 import { Stack as VStack, Row } from '@/components/ui';
-import { PageContainer, ModalContainer } from '@/components/layouts';
+import { PageContainer } from '@/components/layouts';
 import Button from '@/components/Button';
 import Input from '@/components/Input';
 import HeaderWithBackButton from '@/components/HeaderWithBackButton';
@@ -26,6 +25,7 @@ import PhoneNumberCard from './components/PhoneNumberCard';
 import OperatorCard from './components/OperatorCard';
 import SuccessModal from '@/components/organisms/modals/SuccessModal';
 import { useSuccessModal } from '@/hooks/useSuccessModal';
+import GradientBackground from '@/components/atoms/GradientBackground';
 
 type RechargeStep = 'amount' | 'method' | 'phone' | 'confirmation';
 
@@ -67,10 +67,12 @@ export default function RechargeScreen() {
   const successModal = useSuccessModal({
     autoClose: true, // Fermeture automatique après 3s
     onClose: () => {
-      // Fermer d'abord la page modale recharge, puis naviguer vers transactions
-      router.dismiss(); // Ferme le modal recharge
+      router.dismiss();
       setTimeout(() => {
-        router.push('/wallet/transactions'); // Puis navigue vers transactions
+        router.push({
+          pathname: '/',
+          params: { walletRechargeSuccess: Date.now().toString() },
+        } as any);
       }, 100);
     },
   });
@@ -148,6 +150,20 @@ export default function RechargeScreen() {
       animation: 'confetti',
     });
   }, [state, successModal]);
+
+  const handleTestRecharge = useCallback(() => {
+    const amount = state.amount && parseFloat(state.amount) > 0 ? state.amount : '1000';
+    const displayAmount = `${amount} ${getDisplayCurrency()}`;
+    const xafAmount = getDisplayCurrency() !== 'XAF'
+      ? ` (${formatCurrencyWithConversion(convertToXAF(parseFloat(amount) || 0, getDisplayCurrency()), 'XAF', false)})`
+      : '';
+
+    successModal.show({
+      title: 'Recharge réussie !',
+      message: `Votre portefeuille a été rechargé de ${displayAmount}${xafAmount} avec succès.`,
+      animation: 'confetti',
+    });
+  }, [state.amount, successModal, getDisplayCurrency]);
 
   const handleEditNumber = useCallback(() => {
     setState(prev => ({ ...prev, step: 'phone' }));
@@ -409,6 +425,15 @@ export default function RechargeScreen() {
           size="lg"
           fullWidth
         />
+
+        <Button
+          title="Tester recharge réussie"
+          onPress={handleTestRecharge}
+          variant="outline"
+          size="md"
+          fullWidth
+          style={{ marginTop: SPACING.md }}
+        />
       </VStack>
     );
   };
@@ -443,12 +468,12 @@ export default function RechargeScreen() {
   };
 
   return (
-    <>
+    <GradientBackground style={{ flex: 1 }} opacity="10">
       <HeaderWithBackButton 
         title={getHeaderTitle()} 
         onBack={state.step !== 'amount' ? handleBackPress : undefined}
       />
-      <PageContainer>
+      <PageContainer style={{ backgroundColor: 'transparent' }}>
         {state.step === 'amount' && renderAmountStep()}
         {state.step === 'phone' && renderPhoneStep()}
         {state.step === 'confirmation' && renderConfirmationStep()}
@@ -646,6 +671,6 @@ export default function RechargeScreen() {
 
       {/* Modal de succès standardisé */}
       <SuccessModal {...successModal.props} />
-    </>
+    </GradientBackground>
   );
 }

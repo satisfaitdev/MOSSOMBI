@@ -14,20 +14,19 @@ export default function AuthLayout() {
         headerTintColor: colors.text,
         headerShadowVisible: false,
         headerBackTitle: 'Retour',
+        headerShown: false,
       }}
     >
       <Stack.Screen
         name="login"
         options={{
           title: 'Connexion',
-          headerShown: false,
         }}
       />
       <Stack.Screen
         name="register-step1"
         options={{
           title: 'Inscription',
-          headerShown: false,
         }}
       />
       <Stack.Screen

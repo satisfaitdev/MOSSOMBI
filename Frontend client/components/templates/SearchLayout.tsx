@@ -1,5 +1,5 @@
 import React from 'react';
-import { ScrollView, View, FlatList, StyleSheet, ActivityIndicator } from 'react-native';
+import { ScrollView, View, StyleSheet, ActivityIndicator } from 'react-native';
 import { Body } from '@/components/atoms';
 import { Center, Stack } from '@/components/ui';
 import { useTheme } from '@/contexts/ThemeContext';
@@ -53,7 +53,6 @@ export default function SearchLayout<T>({
   header,
   footer,
   keyExtractor = (_, index) => index.toString(),
-  onLoadMore,
   customResults,
 }: SearchLayoutProps<T>) {
   const { colors } = useTheme();
@@ -67,7 +66,7 @@ export default function SearchLayout<T>({
 
   return (
     <ScrollView
-      style={[styles.container, { backgroundColor: colors.background }]}
+      style={[styles.container, { backgroundColor: 'transparent' }]}
       contentContainerStyle={LAYOUT.scrollViewContent}
       showsVerticalScrollIndicator={false}
     >

@@ -5,7 +5,7 @@
 
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { getCurrencyByCountry, getAutoConfigByCountry } from '@/utils/localization';
+import { getCurrencyByCountry, getAutoConfigByCountryWithGeolocation } from '@/utils/localization';
 import { useAuth } from './AuthContext';
 
 interface UserPreferences {
@@ -40,9 +40,9 @@ interface UserPreferencesProviderProps {
 const STORAGE_KEY = 'user_preferences';
 
 // Détection automatique des préférences par défaut selon le pays
-const getDefaultPreferences = (): UserPreferences => {
+const getDefaultPreferences = async (): Promise<UserPreferences> => {
   try {
-    const autoConfig = getAutoConfigByCountry();
+    const autoConfig = await getAutoConfigByCountryWithGeolocation();
     console.log('💰 Préférences automatiques détectées:', autoConfig);
     return {
       preferredCurrency: autoConfig.currency,
@@ -60,7 +60,11 @@ const getDefaultPreferences = (): UserPreferences => {
 };
 
 export function UserPreferencesProvider({ children }: UserPreferencesProviderProps) {
-  const [preferences, setPreferences] = useState<UserPreferences>(getDefaultPreferences());
+  const [preferences, setPreferences] = useState<UserPreferences>({
+    preferredCurrency: 'XAF',
+    autoConvertCurrency: true,
+    language: 'fr',
+  });
   const [isLoading, setIsLoading] = useState(true);
   const { user } = useAuth();
 
@@ -84,12 +88,12 @@ export function UserPreferencesProvider({ children }: UserPreferencesProviderPro
       const stored = await AsyncStorage.getItem(STORAGE_KEY);
       if (stored) {
         const parsedPreferences = JSON.parse(stored);
-        const defaultPrefs = getDefaultPreferences();
+        const defaultPrefs = await getDefaultPreferences();
         setPreferences({ ...defaultPrefs, ...parsedPreferences });
         console.log('📱 Préférences sauvegardées chargées:', parsedPreferences);
       } else {
         // Première utilisation : utiliser la détection automatique
-        const autoPreferences = getDefaultPreferences();
+        const autoPreferences = await getDefaultPreferences();
         console.log('🌍 Première utilisation - Préférences automatiques:', autoPreferences);
         setPreferences(autoPreferences);
         await savePreferences(autoPreferences);
@@ -122,7 +126,7 @@ export function UserPreferencesProvider({ children }: UserPreferencesProviderPro
   };
 
   const resetToDefaults = async () => {
-    const autoDefaults = getDefaultPreferences();
+    const autoDefaults = await getDefaultPreferences();
     console.log('🔄 Reset vers les préférences automatiques:', autoDefaults);
     
     setPreferences(autoDefaults);

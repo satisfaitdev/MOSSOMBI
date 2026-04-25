@@ -4,12 +4,14 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { SPACING, BORDER_RADIUS, TYPOGRAPHY } from '@/constants/colors';
-import { Heading, Body, Caption } from '@/components/atoms';
 import { Stack, Row } from '@/components/ui';
 import { PageContainer } from '@/components/layouts';
 import Button from '@/components/Button';
 import { apiService } from '@/services/api';
 import { CheckCircle, XCircle, Loader } from 'lucide-react-native';
+import { AdaptiveCard } from '@/components/ui/AdaptiveCard';
+import { AdaptiveText } from '@/components/ui/AdaptiveText';
+import AuthPageLayout from '@/components/layouts/AuthPageLayout';
 
 export default function RegisterStep2Screen() {
   const { colors } = useTheme();
@@ -35,11 +37,45 @@ export default function RegisterStep2Screen() {
     }
   }, [params.otpSent]);
 
+  // Si l'OTP n'a pas été envoyé (ex: compte existant inactif), on tente un envoi au chargement
+  useEffect(() => {
+    const otpAlreadySent = params.otpSent as string;
+    if (!phone) return;
+    if (otpAlreadySent === 'true') return;
+
+    let cancelled = false;
+    (async () => {
+      try {
+        console.log('📤 Envoi OTP automatique (register-step2):', { phone });
+        const response = await apiService.sendOTP(phone);
+        if (cancelled) return;
+
+        console.log('📨 Réponse sendOTP (auto):', { phone, response });
+        if (response.success) {
+          setCountdown(60);
+          setOtpSent(true);
+        } else {
+          Alert.alert('Erreur', response.error || 'Impossible d\'envoyer le code');
+        }
+      } catch (error) {
+        if (cancelled) return;
+        console.log('❌ Exception envoi OTP auto:', { phone, error });
+        Alert.alert('Erreur', 'Une erreur est survenue');
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [params.otpSent, phone]);
+
   useEffect(() => {
     if (countdown > 0) {
       const timer = setTimeout(() => setCountdown(countdown - 1), 1000);
       return () => clearTimeout(timer);
     }
+
+    return undefined;
   }, [countdown]);
 
   // Nettoyage du polling au démontage du composant
@@ -89,10 +125,12 @@ export default function RegisterStep2Screen() {
       } else {
         setIsCodeValid(false);
         setIsVerifying(false);
+        Alert.alert('Erreur', verifyResult.error || t('codeIncorrect' as any));
       }
     } catch (error) {
       setIsCodeValid(false);
       setIsVerifying(false);
+      Alert.alert('Erreur', 'Impossible de vérifier le code. Veuillez réessayer.');
     }
   };
 
@@ -127,104 +165,156 @@ export default function RegisterStep2Screen() {
   };
 
   const handleVerify = async () => {
-    // Cette fonction n'est plus utilisée car tout est automatique
-    // Mais on la garde au cas où l'utilisateur clique manuellement
-    console.log('🔄 Bouton continuer cliqué - Transition déjà en cours...');
+    const code = otp.join('');
+    if (code.length !== 6) {
+      Alert.alert('Erreur', t('enterCodeSent' as any));
+      return;
+    }
+
+    // Déclenchement manuel (utile si l'utilisateur clique au lieu d'attendre l'auto-verify)
+    await checkOTPAutomatically(code);
   };
 
   const handleResendOTP = async () => {
     if (!phone) return;
-    
+
+    console.log('📤 Renvoi OTP demandé (register-step2):', { phone });
     try {
       const response = await apiService.sendOTP(phone);
+
+      console.log('📨 Réponse sendOTP:', { phone, response });
       if (response.success) {
+        console.log('✅ OTP renvoyé avec succès (sendOTP):', { phone });
         setCountdown(60);
         setOtpSent(true);
         Alert.alert('Code renvoyé', 'Un nouveau code a été envoyé par WhatsApp');
       } else {
+        console.log('❌ Échec renvoi OTP (sendOTP):', { phone, error: response.error });
         Alert.alert('Erreur', 'Impossible de renvoyer le code');
       }
     } catch (error) {
+      console.log('❌ Exception renvoi OTP (sendOTP):', { phone, error });
       Alert.alert('Erreur', 'Une erreur est survenue');
     }
   };
 
   return (
-    <View style={{ flex: 1, backgroundColor: colors.background }}>
-      <PageContainer>
-        <Stack spacing="md" style={{ marginTop: SPACING.xl }}>
+    <AuthPageLayout title={t('verificationCode' as any)}>
+      <View style={{ flex: 1, backgroundColor: 'transparent' }}>
+        <PageContainer style={{ backgroundColor: 'transparent' }}>
+        <Stack spacing="md" style={{ alignItems: 'center', marginTop: SPACING.lg }}>
           <Stack spacing="xs" style={{ alignItems: 'center' }}>
-            <Heading level={2}>{t('verificationCode' as any)}</Heading>
-            <Caption style={{ textAlign: 'center' }}>
+            <AdaptiveText variant="display" weight="bold" style={{ textAlign: 'center' }}>
+              {t('verificationCode' as any)}
+            </AdaptiveText>
+            <AdaptiveText variant="caption" weight="regular" style={{ textAlign: 'center' }}>
               {t('step3Title' as any)} : {t('enterCodeSent' as any)} {phone}
-            </Caption>
+            </AdaptiveText>
             {otpSent && (
-              <Caption style={{ marginTop: SPACING.xs, color: colors.success || '#10B981' }}>
+              <AdaptiveText variant="caption" weight="regular" style={{ marginTop: SPACING.xs, color: colors.success || '#10B981' }}>
                 {t('codeSentSuccess' as any)}
-              </Caption>
+              </AdaptiveText>
             )}
           </Stack>
-          <View style={{ alignItems: 'center', marginVertical: SPACING.lg }}>
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', width: '100%' }}>
-              {otp.map((digit, index) => (
-                <TextInput key={index} ref={(ref) => { inputRefs.current[index] = ref; }} style={{ width: 50, height: 60, backgroundColor: colors.surface, borderColor: digit ? colors.primary : colors.border, borderWidth: 2, borderRadius: BORDER_RADIUS.lg, color: colors.text, fontSize: TYPOGRAPHY.sizes.xxl, fontWeight: TYPOGRAPHY.weights.bold, textAlign: 'center' }} value={digit} onChangeText={(value) => handleOtpChange(value, index)} keyboardType="number-pad" maxLength={1} selectTextOnFocus />
-              ))}
-            </View>
-            
-            {/* Indicateur visuel du polling */}
-            {otp.join('').length === 6 && (
-              <Row align="center" style={{ marginTop: SPACING.md }}>
-                {isVerifying && (
-                  <>
-                    <Loader size={16} color={colors.textSecondary} />
-                    <Caption style={{ marginLeft: SPACING.xs, color: colors.textSecondary }}>
-                      {t('verifying' as any)}
-                    </Caption>
-                  </>
-                )}
-                {!isVerifying && isCodeValid && (
-                  <>
-                    <CheckCircle size={16} color={colors.success || '#10B981'} />
-                    <Caption style={{ marginLeft: SPACING.xs, color: colors.success || '#10B981' }}>
-                      {t('codeValid' as any)}
-                    </Caption>
-                  </>
-                )}
-                {!isVerifying && !isCodeValid && otp.join('').length === 6 && (
-                  <>
-                    <XCircle size={16} color={colors.error} />
-                    <Caption style={{ marginLeft: SPACING.xs, color: colors.error }}>
-                      {t('codeIncorrect' as any)}
-                    </Caption>
-                  </>
-                )}
-              </Row>
-            )}
-          </View>
-          <Button 
-            title={isCodeValid ? t('next' as any) : t('verifying' as any)} 
-            onPress={handleVerify} 
-            variant="gradient" 
-            loading={isVerifying} 
-            disabled={!isCodeValid} 
-            fullWidth 
-          />
-          {countdown > 0 ? (
-            <Caption style={{ textAlign: 'center' }}>
-              {t('next' as any) === 'Next' ? 
-                `Resend code in ${countdown}s` : 
-                `Renvoyer le code dans ${countdown}s`
-              }
-            </Caption>
-          ) : (
-            <Pressable onPress={handleResendOTP}>
-              <Body style={{ color: colors.primary, textAlign: 'center', fontWeight: TYPOGRAPHY.weights.medium }}>
-                {t('next' as any) === 'Next' ? 'Resend code' : 'Renvoyer le code'}
-              </Body>
-            </Pressable>
-          )}
         </Stack>
-      </PageContainer>
-    </View>
+
+        <AdaptiveCard
+          margin={0}
+          padding={SPACING.lg}
+          variant="elevated"
+          style={{ width: '100%', marginTop: SPACING.lg }}
+        >
+          <Stack spacing="md">
+            <View style={{ alignItems: 'center' }}>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', width: '100%' }}>
+                {otp.map((digit, index) => (
+                  <TextInput
+                    key={index}
+                    ref={(ref) => {
+                      inputRefs.current[index] = ref;
+                    }}
+                    style={{
+                      width: 50,
+                      height: 60,
+                      backgroundColor: colors.surface,
+                      borderColor: digit ? colors.primary : colors.border,
+                      borderWidth: 2,
+                      borderRadius: BORDER_RADIUS.lg,
+                      color: colors.text,
+                      fontSize: TYPOGRAPHY.sizes.xxl,
+                      fontWeight: TYPOGRAPHY.weights.bold,
+                      textAlign: 'center',
+                    }}
+                    value={digit}
+                    onChangeText={(value) => handleOtpChange(value, index)}
+                    keyboardType="number-pad"
+                    maxLength={1}
+                    selectTextOnFocus
+                  />
+                ))}
+              </View>
+
+              {/* Indicateur visuel du polling */}
+              {otp.join('').length === 6 && (
+                <Row align="center" style={{ marginTop: SPACING.md }}>
+                  {isVerifying && (
+                    <>
+                      <Loader size={16} color={colors.textSecondary} />
+                      <AdaptiveText variant="caption" weight="regular" style={{ marginLeft: SPACING.xs, color: colors.textSecondary }}>
+                        {t('verifying' as any)}
+                      </AdaptiveText>
+                    </>
+                  )}
+                  {!isVerifying && isCodeValid && (
+                    <>
+                      <CheckCircle size={16} color={colors.success || '#10B981'} />
+                      <AdaptiveText variant="caption" weight="regular" style={{ marginLeft: SPACING.xs, color: colors.success || '#10B981' }}>
+                        {t('codeValid' as any)}
+                      </AdaptiveText>
+                    </>
+                  )}
+                  {!isVerifying && !isCodeValid && otp.join('').length === 6 && (
+                    <>
+                      <XCircle size={16} color={colors.error} />
+                      <AdaptiveText variant="caption" weight="regular" style={{ marginLeft: SPACING.xs, color: colors.error }}>
+                        {t('codeIncorrect' as any)}
+                      </AdaptiveText>
+                    </>
+                  )}
+                </Row>
+              )}
+            </View>
+
+            <Button
+              title={isVerifying ? t('verifying' as any) : t('next' as any)}
+              onPress={handleVerify}
+              variant="gradient"
+              loading={isVerifying}
+              disabled={otp.join('').length !== 6 || isVerifying}
+              fullWidth
+            />
+
+            {countdown > 0 ? (
+              <AdaptiveText variant="caption" weight="regular" style={{ textAlign: 'center' }}>
+                {t('next' as any) === 'Next'
+                  ? `Resend code in ${countdown}s`
+                  : `Renvoyer le code dans ${countdown}s`}
+              </AdaptiveText>
+            ) : (
+              <Pressable onPress={handleResendOTP}>
+                <AdaptiveText
+                  variant="body"
+                  weight="medium"
+                  style={{ color: colors.primary, textAlign: 'center' }}
+                >
+                  {t('next' as any) === 'Next' ? 'Resend code' : 'Renvoyer le code'}
+                </AdaptiveText>
+              </Pressable>
+            )}
+          </Stack>
+        </AdaptiveCard>
+        </PageContainer>
+      </View>
+    </AuthPageLayout>
   );
 }

@@ -111,7 +111,7 @@ const styles = StyleSheet.create({
   banner: {
     padding: SPACING.md,
     position: 'relative',
-    minHeight: 140,
+    minHeight: 105,
   },
   overlay: {
     ...StyleSheet.absoluteFillObject,

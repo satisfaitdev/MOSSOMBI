@@ -1,10 +1,10 @@
 import React from 'react';
 import { useRouter } from 'expo-router';
-import { Package, Car, Flame, Truck } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Package, Car, Flame, Truck } from 'lucide-react-native';
 import { useTheme } from '@/contexts/ThemeContext';
 import CategoryCard from '@/components/molecules/CategoryCard';
-import PageContainer from '@/components/layouts/PageContainer';
+import { CategoryPageLayout } from '@/components/templates';
 
 interface DeliveryService {
   id: string;
@@ -24,7 +24,7 @@ export default function DeliveryScreen() {
     {
       id: 'package',
       name: 'Livraison Colis',
-      description: 'Envoyez vos colis',
+      description: 'Envoyez vos colis en toute sécurité dans toute la ville.',
       icon: <Package size={32} color={colors.primary} />,
       iconColor: colors.primary,
       route: '/delivery/package',
@@ -32,7 +32,7 @@ export default function DeliveryScreen() {
     {
       id: 'taxi',
       name: 'Réservation Taxi',
-      description: 'Taxi dans la ville',
+      description: 'Commandez un chauffeur professionnel pour vos déplacements.',
       icon: <Car size={32} color={colors.secondary} />,
       iconColor: colors.secondary,
       route: '/delivery/taxi',
@@ -40,7 +40,7 @@ export default function DeliveryScreen() {
     {
       id: 'gas',
       name: 'Livraison Gaz',
-      description: 'Bonbonne de gaz',
+      description: 'Commandez votre bonbonne de gaz sans vous déplacer.',
       icon: <Flame size={32} color={colors.accent} />,
       iconColor: colors.accent,
       route: '/delivery/gas',
@@ -48,7 +48,7 @@ export default function DeliveryScreen() {
     {
       id: 'moving',
       name: 'Déménagement',
-      description: 'Service de déménagement',
+      description: 'Service complet pour votre déménagement en toute sérénité.',
       icon: <Truck size={32} color={colors.primary} />,
       iconColor: colors.primary,
       route: '/delivery/moving',
@@ -60,7 +60,34 @@ export default function DeliveryScreen() {
   };
 
   return (
-    <PageContainer>
+    <CategoryPageLayout
+      title="Livraison et Transport"
+      backgroundIcons={
+        <>
+          <Package
+            size={100}
+            color="#FFFFFF"
+            style={{ opacity: 0.65, position: 'absolute', top: insets.top + 20, left: 45 }}
+          />
+          <Car
+            size={85}
+            color="#FFFFFF"
+            style={{
+              opacity: 0.6,
+              position: 'absolute',
+              top: insets.top + 35,
+              right: 40,
+              transform: [{ rotate: '10deg' }],
+            }}
+          />
+          <Truck
+            size={70}
+            color="#FFFFFF"
+            style={{ opacity: 0.6, position: 'absolute', top: insets.top + 75, left: '46%' }}
+          />
+        </>
+      }
+    >
       {services.map((service) => (
         <CategoryCard
           key={service.id}
@@ -71,6 +98,6 @@ export default function DeliveryScreen() {
           onPress={() => handleServicePress(service.route)}
         />
       ))}
-    </PageContainer>
+    </CategoryPageLayout>
   );
 }

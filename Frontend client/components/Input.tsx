@@ -1,9 +1,12 @@
 import React, { useState } from 'react';
-import { StyleSheet, Text, TextInput, TextInputProps, View } from 'react-native';
+import { Platform, StyleSheet, TextInput, TextInputProps, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Search, Calendar, Phone } from 'lucide-react-native';
 import { useTheme } from '@/contexts/ThemeContext';
 import { BORDER_RADIUS, SPACING, TYPOGRAPHY } from '@/constants/colors';
+import { GRADIENTS } from '@/constants/gradients';
+import { AdaptiveText } from '@/components/ui/AdaptiveText';
+import { GlassContainer } from '@/components/ui/GlassContainer';
 
 // ==========================================
 // TYPES
@@ -48,7 +51,7 @@ export default function Input({
   multiline,
   ...props
 }: InputProps) {
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
   const [isFocused, setIsFocused] = useState(false);
 
   // Déterminer l'icône selon le variant
@@ -108,25 +111,30 @@ export default function Input({
   return (
     <View style={styles.container}>
       {label && (
-        <Text
+        <AdaptiveText
+          variant="body"
+          weight="medium"
+          color={colors.text}
           style={[
             styles.label,
             {
-              color: colors.text,
               fontSize: TYPOGRAPHY.sizes.sm,
-              fontWeight: TYPOGRAPHY.weights.medium,
               marginBottom: SPACING.xs,
             },
           ]}
         >
           {label}
-          {required && <Text style={{ color: colors.error }}> *</Text>}
-        </Text>
+          {required && (
+            <AdaptiveText variant="body" weight="medium" color={colors.error}>
+              {' '}*
+            </AdaptiveText>
+          )}
+        </AdaptiveText>
       )}
       
       {gradientBorder ? (
         <LinearGradient
-          colors={[colors.gradientStart, colors.gradientEnd]}
+          colors={GRADIENTS.primary.colors}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
           style={[
@@ -161,7 +169,7 @@ export default function Input({
                 isTextarea && styles.textarea,
                 {
                   color: colors.text,
-                  fontSize: TYPOGRAPHY.sizes.md,
+                  fontSize: TYPOGRAPHY.sizes.sm,
                 },
                 style,
               ]}
@@ -185,58 +193,119 @@ export default function Input({
             styles.inputContainer,
             isTextarea && styles.textareaContainer,
             {
-              backgroundColor: colors.surface,
-              borderColor: error ? colors.error : isFocused ? colors.primary : colors.border,
-              borderWidth: isFocused ? 2 : 1,
+              backgroundColor: Platform.OS === 'ios' ? 'transparent' : colors.surface,
+              borderColor: error
+                ? colors.error
+                : isFocused
+                  ? `${colors.primary}66`
+                  : colors.border,
+              borderWidth: Platform.OS === 'ios' ? 1 : (isFocused ? 2 : 1),
               borderRadius: BORDER_RADIUS.lg,
-              paddingHorizontal: SPACING.md,
+              paddingHorizontal: 0,
             },
           ]}
         >
-          {variantIcon && (
-            <View style={[styles.iconContainer, isTextarea && styles.iconTop]}>
-              {variantIcon}
-            </View>
-          )}
-          
-          <TextInput
-            style={[
-              styles.input,
-              isTextarea && styles.textarea,
-              {
-                color: colors.text,
-                fontSize: TYPOGRAPHY.sizes.md,
-              },
-              style,
-            ]}
-            placeholderTextColor={colors.textTertiary}
-            onFocus={() => setIsFocused(true)}
-            onBlur={() => setIsFocused(false)}
-            {...variantProps}
-            {...props}
-          />
-          
-          {rightIcon && (
-            <View style={[styles.iconContainer, isTextarea && styles.iconTop]}>
-              {rightIcon}
+          {Platform.OS === 'ios' ? (
+            <GlassContainer
+              blur={isDark ? 75 : 60}
+              tint={isDark ? 'dark' : 'light'}
+              opacity={isDark ? 0.04 : 0.08}
+              borderRadius={BORDER_RADIUS.lg}
+              style={{
+                flex: 1,
+                minHeight: 48,
+                flexDirection: 'row',
+                alignItems: isTextarea ? 'flex-start' : 'center',
+                paddingHorizontal: SPACING.md,
+                paddingVertical: isTextarea ? SPACING.sm : 0,
+              }}
+            >
+              {variantIcon && (
+                <View style={[styles.iconContainer, isTextarea && styles.iconTop]}>
+                  {variantIcon}
+                </View>
+              )}
+
+              <TextInput
+                style={[
+                  styles.input,
+                  isTextarea && styles.textarea,
+                  {
+                    color: colors.text,
+                    fontSize: TYPOGRAPHY.sizes.sm,
+                  },
+                  style,
+                ]}
+                placeholderTextColor={colors.textTertiary}
+                onFocus={() => setIsFocused(true)}
+                onBlur={() => setIsFocused(false)}
+                {...variantProps}
+                {...props}
+              />
+
+              {rightIcon && (
+                <View style={[styles.iconContainer, isTextarea && styles.iconTop]}>
+                  {rightIcon}
+                </View>
+              )}
+            </GlassContainer>
+          ) : (
+            <View
+              style={{
+                flexDirection: 'row',
+                alignItems: isTextarea ? 'flex-start' : 'center',
+                flex: 1,
+                paddingHorizontal: SPACING.md,
+              }}
+            >
+              {variantIcon && (
+                <View style={[styles.iconContainer, isTextarea && styles.iconTop]}>
+                  {variantIcon}
+                </View>
+              )}
+
+              <TextInput
+                style={[
+                  styles.input,
+                  isTextarea && styles.textarea,
+                  {
+                    color: colors.text,
+                    fontSize: TYPOGRAPHY.sizes.sm,
+                  },
+                  style,
+                ]}
+                placeholderTextColor={colors.textTertiary}
+                onFocus={() => setIsFocused(true)}
+                onBlur={() => setIsFocused(false)}
+                {...variantProps}
+                {...props}
+              />
+
+              {rightIcon && (
+                <View style={[styles.iconContainer, isTextarea && styles.iconTop]}>
+                  {rightIcon}
+                </View>
+              )}
             </View>
           )}
         </View>
       )}
       
       {(error || helperText) && (
-        <Text
+        <AdaptiveText
+          variant="caption"
+          weight="regular"
+          color={error ? colors.error : colors.textSecondary}
           style={[
             styles.helperText,
             {
-              color: error ? colors.error : colors.textSecondary,
               fontSize: TYPOGRAPHY.sizes.xs,
               marginTop: SPACING.xs,
             },
           ]}
         >
           {error || helperText}
-        </Text>
+        </AdaptiveText>
       )}
     </View>
   );
@@ -265,7 +334,7 @@ const styles = StyleSheet.create({
     minHeight: 104, // 100 + 4 (2px de chaque côté)
   },
   gradientInputContainer: {
-    minHeight: 48, // Hauteur originale
+    minHeight: 48,
     margin: 0,
   },
   iconContainer: {
@@ -277,7 +346,7 @@ const styles = StyleSheet.create({
   },
   input: {
     flex: 1,
-    paddingVertical: SPACING.sm,
+    paddingVertical: SPACING.xs,
   },
   textarea: {
     minHeight: 80,

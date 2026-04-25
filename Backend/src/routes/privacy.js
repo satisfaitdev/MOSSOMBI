@@ -5,7 +5,7 @@
 
 import express from 'express';
 import Joi from 'joi';
-import { supabaseAdmin } from '../config/supabase.js';
+import { dbAdmin } from '../config/db.js';
 import { authenticateToken } from '../middleware/authMiddleware.js';
 import { asyncHandler, ValidationError } from '../middleware/errorHandler.js';
 const router = express.Router();
@@ -43,7 +43,7 @@ router.get('/settings', authenticateToken, asyncHandler(async (req, res) => {
   console.log('🔒 Privacy Settings - Récupération pour utilisateur:', req.user.id);
 
   // Récupérer les paramètres depuis la base de données
-  const { data: user, error } = await supabaseAdmin
+  const { data: user, error } = await dbAdmin
     .from('users')
     .select('privacy_settings, created_at')
     .eq('id', req.user.id)
@@ -110,7 +110,7 @@ router.put('/settings', authenticateToken, asyncHandler(async (req, res) => {
   const { privacy_settings } = value;
 
   // Mettre à jour dans la base de données
-  const { data: updatedUser, error: updateError } = await supabaseAdmin
+  const { data: updatedUser, error: updateError } = await dbAdmin
     .from('users')
     .update({
       privacy_settings,
@@ -145,7 +145,7 @@ router.post('/export-data', authenticateToken, asyncHandler(async (req, res) => 
 
   try {
     // Récupérer toutes les données de l'utilisateur
-    const { data: userData, error: userError } = await supabaseAdmin
+    const { data: userData, error: userError } = await dbAdmin
       .from('users')
       .select('*')
       .eq('id', req.user.id)
@@ -156,14 +156,14 @@ router.post('/export-data', authenticateToken, asyncHandler(async (req, res) => 
     }
 
     // Récupérer les transactions du wallet
-    const { data: walletData, error: walletError } = await supabaseAdmin
+    const { data: walletData, error: walletError } = await dbAdmin
       .from('wallet_transactions')
       .select('*')
       .eq('user_id', req.user.id)
       .order('created_at', { ascending: false });
 
     // Récupérer les notifications
-    const { data: notificationsData, error: notifError } = await supabaseAdmin
+    const { data: notificationsData, error: notifError } = await dbAdmin
       .from('notifications')
       .select('*')
       .eq('user_id', req.user.id)
@@ -226,7 +226,7 @@ router.delete('/delete-account', authenticateToken, asyncHandler(async (req, res
 
   try {
     // 1. Supprimer les transactions du wallet
-    const { error: walletError } = await supabaseAdmin
+    const { error: walletError } = await dbAdmin
       .from('wallet_transactions')
       .delete()
       .eq('user_id', req.user.id);
@@ -236,7 +236,7 @@ router.delete('/delete-account', authenticateToken, asyncHandler(async (req, res
     }
 
     // 2. Supprimer les notifications
-    const { error: notifError } = await supabaseAdmin
+    const { error: notifError } = await dbAdmin
       .from('notifications')
       .delete()
       .eq('user_id', req.user.id);
@@ -246,7 +246,7 @@ router.delete('/delete-account', authenticateToken, asyncHandler(async (req, res
     }
 
     // 3. Supprimer le profil utilisateur
-    const { error: userError } = await supabaseAdmin
+    const { error: userError } = await dbAdmin
       .from('users')
       .delete()
       .eq('id', req.user.id);

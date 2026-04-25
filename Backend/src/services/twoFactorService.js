@@ -6,7 +6,7 @@
 import crypto from 'crypto';
 import speakeasy from 'speakeasy';
 import QRCode from 'qrcode';
-import { supabaseAdmin } from '../config/supabase.js';
+import { dbAdmin } from '../config/db.js';
 import { logger } from '../utils/logger.js';
 
 class TwoFactorService {
@@ -83,33 +83,36 @@ class TwoFactorService {
     
     try {
       // Supprimer les anciens codes
-      await supabaseAdmin
+      await dbAdmin
         .from('two_factor_codes')
         .delete()
         .eq('user_id', userId)
         .eq('method', method);
 
       // Stocker le nouveau code
-      const { error } = await supabaseAdmin
+      const { error } = await dbAdmin
         .from('two_factor_codes')
         .insert({
           user_id: userId,
           code: code,
           method: method,
+          is_used: false,
           expires_at: expiresAt.toISOString(),
           attempts: 0,
           created_at: new Date().toISOString()
         });
 
       if (error) {
-        logger.error('Erreur stockage code 2FA', { userId, error });
+        const errorMessage = error?.message ? String(error.message) : JSON.stringify(error);
+        logger.error(`Erreur stockage code 2FA: ${errorMessage}`, { userId, method });
         return false;
       }
 
       logger.info('Code 2FA stocké', { userId, method, expiresAt });
       return true;
     } catch (error) {
-      logger.error('Erreur stockage code 2FA', { userId, error });
+      const errorMessage = error?.message ? String(error.message) : String(error);
+      logger.error(`Erreur stockage code 2FA: ${errorMessage}`, { userId, method });
       return false;
     }
   }
@@ -118,9 +121,10 @@ class TwoFactorService {
    * Vérifier un code 2FA (WhatsApp ou Authenticator)
    */
   async verifyCode(userId, inputCode, method = 'whatsapp', totpSecret = null) {
+    const normalizedInputCode = inputCode === undefined || inputCode === null ? '' : String(inputCode).trim();
     // Pour Authenticator, vérification directe avec TOTP
     if (method === 'authenticator' && totpSecret) {
-      const isValid = this.verifyTOTPCode(totpSecret, inputCode);
+      const isValid = this.verifyTOTPCode(totpSecret, normalizedInputCode);
       if (isValid) {
         logger.info('Code Authenticator vérifié avec succès', { userId, method });
         return { success: true };
@@ -133,15 +137,19 @@ class TwoFactorService {
     // Pour WhatsApp, vérification via base de données
     try {
       // Récupérer le code stocké
-      const { data: storedCode, error } = await supabaseAdmin
+      const { data: storedCode, error } = await dbAdmin
         .from('two_factor_codes')
         .select('*')
         .eq('user_id', userId)
         .eq('method', method)
-        .eq('is_used', false)
+        .or('is_used.is.null,is_used.eq.false')
         .single();
 
       if (error || !storedCode) {
+        if (error) {
+          const errorMessage = error?.message ? String(error.message) : JSON.stringify(error);
+          logger.warn(`Erreur récupération code 2FA: ${errorMessage}`, { userId, method });
+        }
         logger.warn('Code 2FA non trouvé', { userId, method });
         return { success: false, error: 'Code non trouvé ou expiré' };
       }
@@ -161,9 +169,10 @@ class TwoFactorService {
       }
 
       // Vérifier le code
-      if (storedCode.code !== inputCode) {
+      const normalizedStoredCode = storedCode?.code === undefined || storedCode?.code === null ? '' : String(storedCode.code).trim();
+      if (!normalizedInputCode || normalizedStoredCode !== normalizedInputCode) {
         // Incrémenter les tentatives
-        await supabaseAdmin
+        await dbAdmin
           .from('two_factor_codes')
           .update({ attempts: storedCode.attempts + 1 })
           .eq('id', storedCode.id);
@@ -173,7 +182,7 @@ class TwoFactorService {
       }
 
       // Code valide - marquer comme utilisé
-      await supabaseAdmin
+      await dbAdmin
         .from('two_factor_codes')
         .update({ 
           is_used: true,
@@ -194,7 +203,7 @@ class TwoFactorService {
    * Invalider un code 2FA
    */
   async invalidateCode(codeId) {
-    await supabaseAdmin
+    await dbAdmin
       .from('two_factor_codes')
       .update({ 
         is_used: true,
@@ -229,7 +238,7 @@ class TwoFactorService {
    */
   async cleanupExpiredCodes() {
     try {
-      const { error } = await supabaseAdmin
+      const { error } = await dbAdmin
         .from('two_factor_codes')
         .delete()
         .lt('expires_at', new Date().toISOString());

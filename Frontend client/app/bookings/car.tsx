@@ -14,6 +14,7 @@ import { SearchLayout } from '@/components/templates';
 import { BookingModal, BookingResultCard } from '@/components/organisms';
 import Button from '@/components/Button';
 import Input from '@/components/Input';
+import GradientBackground from '@/components/atoms/GradientBackground';
 
 interface CarRental {
   id: string;
@@ -119,7 +120,7 @@ export default function CarRentalScreen() {
   );
 
   return (
-    <>
+    <GradientBackground style={{ flex: 1 }} opacity="10">
       <HeaderWithBackButton title="Location de voiture" />
       <SearchLayout searchBar={renderSearchBar()} filters={renderFilters()} results={filteredCars} renderItem={renderCarCard} loading={isLoading} emptyState={<EmptyState title="Aucune voiture trouvée" message="Modifiez vos critères" actionLabel="Réinitialiser" onAction={() => { setSearchQuery(''); setCarType('all'); setTransmission('all'); }} />} />
       <BookingModal
@@ -141,6 +142,6 @@ export default function CarRentalScreen() {
         size="lg"
       />
       <SuccessModal visible={showSuccessModal} onClose={() => { setShowSuccessModal(false); setSelectedCar(null); }} title="Voiture réservée !" message={`Votre ${selectedCar?.brand} ${selectedCar?.model} a été réservée.`} animation="confetti" autoClose buttonLabel="Voir mes réservations" />
-    </>
+    </GradientBackground>
   );
 }

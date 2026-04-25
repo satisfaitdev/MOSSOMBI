@@ -14,6 +14,7 @@ import Button from '@/components/Button';
 import { SuccessModal } from '@/components/organisms/modals';
 import { biometricService } from '@/services/biometricService';
 import { apiService } from '@/services/api';
+import GradientBackground from '@/components/atoms/GradientBackground';
 
 interface SecuritySettings {
   authenticatorAuth: boolean;
@@ -560,10 +561,10 @@ export default function SecurityScreen() {
   );
 
   return (
-    <>
+    <GradientBackground style={{ flex: 1 }} opacity="10">
       <HeaderWithBackButton title={t('securityTitle' as any)} />
-      <PageContainer>
-          <Stack spacing="xl">
+      <PageContainer style={{ backgroundColor: 'transparent' }}>
+        <Stack spacing="xl">
             {/* Authentification */}
             <View>
               <Heading level={3} style={{ marginBottom: SPACING.md }}>{t('authentication' as any)}</Heading>
@@ -744,22 +745,30 @@ export default function SecurityScreen() {
           setCodeVerified(false);
         }}
       >
-        <KeyboardAvoidingView 
+        <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           style={{ flex: 1 }}
         >
           <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' }}>
-            <View style={{
-              backgroundColor: colors.background,
-              borderTopLeftRadius: BORDER_RADIUS.xl,
-              borderTopRightRadius: BORDER_RADIUS.xl,
-              paddingHorizontal: SPACING.md,
-              paddingVertical: SPACING.lg,
-              maxHeight: '90%'
-            }}>
-              <Row justify="space-between" align="center" style={{ marginBottom: SPACING.lg, paddingHorizontal: SPACING.xs }}>
-                <Heading level={3} style={{ flex: 1, marginRight: SPACING.md }}>Configurer Authenticator</Heading>
-                <Pressable 
+            <View
+              style={{
+                backgroundColor: colors.background,
+                borderTopLeftRadius: BORDER_RADIUS.xl,
+                borderTopRightRadius: BORDER_RADIUS.xl,
+                paddingHorizontal: SPACING.md,
+                paddingVertical: SPACING.lg,
+                maxHeight: '90%',
+              }}
+            >
+              <Row
+                justify="space-between"
+                align="center"
+                style={{ marginBottom: SPACING.lg, paddingHorizontal: SPACING.xs }}
+              >
+                <Heading level={3} style={{ flex: 1, marginRight: SPACING.md }}>
+                  Configurer Authenticator
+                </Heading>
+                <Pressable
                   onPress={() => {
                     setShowAuthenticatorModal(false);
                     setQrCode('');
@@ -788,7 +797,7 @@ export default function SecurityScreen() {
                 </Pressable>
               </Row>
 
-              <ScrollView 
+              <ScrollView
                 showsVerticalScrollIndicator={false}
                 keyboardShouldPersistTaps="handled"
                 contentContainerStyle={{ paddingBottom: SPACING.lg }}
@@ -808,17 +817,19 @@ export default function SecurityScreen() {
                   {qrCode !== '' && (
                     <>
                       <View style={{ alignItems: 'center', marginBottom: SPACING.md }}>
-                        <View style={{ 
-                          width: 200, 
-                          height: 200, 
-                          backgroundColor: colors.surface, 
-                          borderRadius: BORDER_RADIUS.md, 
-                          overflow: 'hidden', 
-                          justifyContent: 'center', 
-                          alignItems: 'center',
-                          borderWidth: 1,
-                          borderColor: colors.border
-                        }}>
+                        <View
+                          style={{
+                            width: 200,
+                            height: 200,
+                            backgroundColor: colors.surface,
+                            borderRadius: BORDER_RADIUS.md,
+                            overflow: 'hidden',
+                            justifyContent: 'center',
+                            alignItems: 'center',
+                            borderWidth: 1,
+                            borderColor: colors.border,
+                          }}
+                        >
                           <Image
                             source={{ uri: qrCode }}
                             style={{ width: 200, height: 200, resizeMode: 'contain' }}
@@ -829,17 +840,17 @@ export default function SecurityScreen() {
                         </Caption>
                       </View>
 
-                      <View style={{ 
-                        backgroundColor: colors.surface, 
-                        padding: SPACING.md, 
-                        borderRadius: BORDER_RADIUS.md,
-                        borderWidth: 1,
-                        borderColor: colors.border
-                      }}>
+                      <View
+                        style={{
+                          backgroundColor: colors.surface,
+                          padding: SPACING.md,
+                          borderRadius: BORDER_RADIUS.md,
+                          borderWidth: 1,
+                          borderColor: colors.border,
+                        }}
+                      >
                         <Row justify="space-between" align="center" style={{ marginBottom: SPACING.xs }}>
-                          <Caption style={{ fontWeight: TYPOGRAPHY.weights.medium }}>
-                            Code manuel :
-                          </Caption>
+                          <Caption style={{ fontWeight: TYPOGRAPHY.weights.medium }}>Code manuel :</Caption>
                           <Pressable
                             onPress={handleCopyManualKey}
                             style={{
@@ -852,14 +863,18 @@ export default function SecurityScreen() {
                             }}
                           >
                             <Copy size={14} color={colors.primary} />
-                            <Caption style={{ marginLeft: SPACING.xs, color: colors.primary, fontWeight: TYPOGRAPHY.weights.medium }}>
+                            <Caption
+                              style={{
+                                marginLeft: SPACING.xs,
+                                color: colors.primary,
+                                fontWeight: TYPOGRAPHY.weights.medium,
+                              }}
+                            >
                               Copier
                             </Caption>
                           </Pressable>
                         </Row>
-                        <Body style={{ fontFamily: 'monospace', fontSize: 14, lineHeight: 20 }}>
-                          {manualEntryKey}
-                        </Body>
+                        <Body style={{ fontFamily: 'monospace', fontSize: 14, lineHeight: 20 }}>{manualEntryKey}</Body>
                       </View>
 
                       <Input
@@ -881,7 +896,7 @@ export default function SecurityScreen() {
                           await handleSetupTwoFactor();
                           const result = await apiService.updateSecuritySettings({ authenticator_enabled: true });
                           if (result.success) {
-                            setSecuritySettings(prev => ({ ...prev, authenticatorAuth: true }));
+                            setSecuritySettings((prev) => ({ ...prev, authenticatorAuth: true }));
                             setShowAuthenticatorModal(false);
                           }
                         }}
@@ -898,6 +913,6 @@ export default function SecurityScreen() {
           </View>
         </KeyboardAvoidingView>
       </Modal>
-    </>
+    </GradientBackground>
   );
-};
+}

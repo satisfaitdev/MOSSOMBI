@@ -20,6 +20,7 @@ import Button from '@/components/Button';
 import { SuccessModal } from '@/components/organisms/modals';
 import DeleteAccountModal from '@/components/DeleteAccountModal';
 import LoadingPopup from '@/components/LoadingPopup';
+import GradientBackground from '@/components/atoms/GradientBackground';
 
 // ==========================================
 // CONSTANTES DE TEXTE (À DÉPLACER VERS LES TRADUCTIONS)
@@ -716,13 +717,13 @@ export default function PrivacyScreen() {
 
   if (isLoading) {
     return (
-      <>
-        <PageContainer>
-          <HeaderWithBackButton title={getText('title')} />
+      <GradientBackground style={{ flex: 1 }} opacity="10">
+        <HeaderWithBackButton title={getText('title')} />
+        <PageContainer style={{ backgroundColor: 'transparent' }}>
           <View style={{ flex: 1 }} />
         </PageContainer>
         <LoadingPopup visible={true} />
-      </>
+      </GradientBackground>
     );
   }
 
@@ -847,9 +848,10 @@ export default function PrivacyScreen() {
   ];
 
   return (
-    <PageContainer>
+    <GradientBackground style={{ flex: 1 }} opacity="10">
       <HeaderWithBackButton title={getText('title')} />
-      <Stack spacing="xl" style={{ marginTop: SPACING.lg }}>
+      <PageContainer style={{ backgroundColor: 'transparent' }}>
+        <Stack spacing="xl" style={{ marginTop: SPACING.lg }}>
           {/* En-tête avec informations */}
           <View style={[
             COMMON_STYLES.card,
@@ -889,120 +891,58 @@ export default function PrivacyScreen() {
                     icon={item.icon}
                     title={item.title}
                     description={item.description}
-                    value={settings[item.key as keyof typeof settings] as boolean}
-                    onValueChange={(value) => handleSettingChange(item.key, value)}
+                    value={settings[item.key as keyof typeof settings]}
+                    onValueChange={(value) => updateSetting(item.key as any, value)}
                     settingKey={item.key}
                   />
                 ))}
               </Stack>
             </View>
           ))}
+          {/* Boutons d'action */}
+          <View style={{ marginTop: SPACING.xl }}>
+            <Stack spacing="md">
+              <Button
+                title={getText('savePreferences')}
+                onPress={handleSavePreferences}
+                variant="gradient"
+                size="lg"
+                fullWidth
+                loading={isSaving}
+              />
 
-          {/* Actions de gestion des données */}
-          <View>
-            <Heading level={3} style={{ marginBottom: SPACING.md, color: colors.text }}>
-              {getText('dataManagement')}
-            </Heading>
-            <Stack spacing="sm">
-              {/* Bouton Exporter */}
-              <Pressable
+              <Button
+                title={getText('exportData')}
                 onPress={handleExportData}
-                style={[
-                  COMMON_STYLES.card,
-                  {
-                    backgroundColor: colors.card,
-                    borderColor: colors.border,
-                    padding: SPACING.md,
-                  }
-                ]}
-              >
-                <Row spacing="md" align="center">
-                  <View style={{
-                    width: 40,
-                    height: 40,
-                    backgroundColor: colors.success + '20',
-                    borderRadius: BORDER_RADIUS.md,
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                  }}>
-                    <Download size={20} color={colors.success} />
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <Body style={{ fontWeight: TYPOGRAPHY.weights.semibold, color: colors.text }}>
-                      {getText('exportData')}
-                    </Body>
-                    <Caption style={{ color: colors.textSecondary }}>
-                      Télécharger une copie de vos données
-                    </Caption>
-                  </View>
-                </Row>
-              </Pressable>
+                variant="outline"
+                size="lg"
+                fullWidth
+                icon={<Download size={20} color={colors.primary} />}
+              />
 
-              {/* Bouton Supprimer compte */}
-              <Pressable
-                onPress={handleDeleteAccount}
-                style={[
-                  COMMON_STYLES.card,
-                  {
-                    backgroundColor: colors.card,
-                    borderColor: colors.error + '30',
-                    padding: SPACING.md,
-                  }
-                ]}
-              >
-                <Row spacing="md" align="center">
-                  <View style={{
-                    width: 40,
-                    height: 40,
-                    backgroundColor: colors.error + '20',
-                    borderRadius: BORDER_RADIUS.md,
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                  }}>
-                    <Trash2 size={20} color={colors.error} />
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <Body style={{ fontWeight: TYPOGRAPHY.weights.semibold, color: colors.error }}>
-                      {getText('deleteAccount')}
-                    </Body>
-                    <Caption style={{ color: colors.textSecondary }}>
-                      Supprimer définitivement votre compte
-                    </Caption>
-                  </View>
-                </Row>
-              </Pressable>
+              <Button
+                title={getText('privacyPolicy')}
+                onPress={handleOpenPrivacyPolicy}
+                variant="ghost"
+                size="md"
+                fullWidth
+              />
 
+              <Button
+                title={getText('deleteAccount')}
+                onPress={() => setShowDeleteModal(true)}
+                variant="danger"
+                size="md"
+                fullWidth
+                icon={<Trash2 size={20} color="#FFFFFF" />}
+              />
             </Stack>
           </View>
-
-          {/* Bouton d'enregistrement */}
-          <Button
-            title={getText('savePreferences')}
-            onPress={handleSavePreferences}
-            loading={isSaving}
-            variant="gradient"
-          />
-
-          {/* Lien politique de confidentialité */}
-          <Pressable
-            onPress={handleOpenPrivacyPolicy}
-            style={({ pressed }) => ({
-              padding: SPACING.sm,
-              opacity: pressed ? 0.7 : 1,
-            })}
-          >
-            <Caption style={{ 
-              textAlign: 'center', 
-              color: colors.primary, 
-              textDecorationLine: 'underline' 
-            }}>
-              {getText('privacyPolicy')}
-            </Caption>
-          </Pressable>
-      </Stack>
+        </Stack>
+      </PageContainer>
 
       <SuccessModal {...successModal.props} />
-      
+
       <DeleteAccountModal
         visible={showDeleteModal}
         onClose={() => setShowDeleteModal(false)}
@@ -1011,6 +951,6 @@ export default function PrivacyScreen() {
 
       {/* Modal de chargement pour la sauvegarde */}
       <LoadingPopup visible={isSaving} />
-    </PageContainer>
+    </GradientBackground>
   );
 }

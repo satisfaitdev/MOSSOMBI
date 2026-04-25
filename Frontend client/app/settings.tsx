@@ -10,6 +10,7 @@ import { SPACING, BORDER_RADIUS, TYPOGRAPHY, SHADOWS } from '@/constants/colors'
 import { Heading, Body, Caption } from '@/components/atoms';
 import { Stack, Row } from '@/components/ui';
 import PageContainer from '@/components/layouts/PageContainer';
+import GradientBackground from '@/components/atoms/GradientBackground';
 
 export default function SettingsScreen() {
   const { colors } = useTheme();
@@ -56,10 +57,10 @@ export default function SettingsScreen() {
   );
 
   return (
-    <>
+    <GradientBackground style={{ flex: 1 }} opacity="10">
       <HeaderWithBackButton title={t('settings')} />
-      <PageContainer>
-          <Stack spacing="xl">
+      <PageContainer style={{ backgroundColor: 'transparent' }}>
+        <Stack spacing="xl">
             {/* Notifications */}
             <View>
               <Heading level={3} style={{ marginBottom: SPACING.md }}>{t('notifications')}</Heading>
@@ -130,8 +131,8 @@ export default function SettingsScreen() {
             </View>
 
             {/* Section Tests supprimée - Pages de test accessibles directement en développement */}
-          </Stack>
+        </Stack>
       </PageContainer>
-    </>
+    </GradientBackground>
   );
 }

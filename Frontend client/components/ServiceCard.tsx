@@ -1,7 +1,8 @@
 import React from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View, type TextStyle } from 'react-native';
 import { useTheme } from '@/contexts/ThemeContext';
-import { BORDER_RADIUS, SHADOWS, SPACING, TYPOGRAPHY } from '@/constants/colors';
+import { BORDER_RADIUS, SPACING, TYPOGRAPHY } from '@/constants/colors';
+import { AdaptiveCard } from '@/components/ui';
 
 interface ServiceCardProps {
   title: string;
@@ -10,35 +11,30 @@ interface ServiceCardProps {
   onPress: () => void;
   badge?: string;
   testID?: string;
+  titleStyle?: TextStyle;
 }
 
 export default function ServiceCard({
   title,
   icon,
-  iconColor,
+  iconColor: _iconColor,
   onPress,
   badge,
   testID,
+  titleStyle,
 }: ServiceCardProps) {
   const { colors } = useTheme();
 
   return (
-    <Pressable
+    <AdaptiveCard
       onPress={onPress}
       testID={testID}
-      style={({ pressed }) => [
-        styles.card,
-        {
-          backgroundColor: colors.card,
-          borderRadius: BORDER_RADIUS.lg,
-          paddingVertical: SPACING.xs,
-          paddingHorizontal: SPACING.xs,
-          opacity: pressed ? 0.7 : 1,
-          borderWidth: 1,
-          borderColor: colors.border,
-        },
-        SHADOWS.sm,
-      ]}
+      padding={0}
+      borderRadius={BORDER_RADIUS.lg}
+      elevation={0}
+      variant="outlined"
+      margin={0}
+      style={[styles.card, { backgroundColor: colors.card }]}
     >
       {badge && (
         <View
@@ -66,32 +62,24 @@ export default function ServiceCard({
           </Text>
         </View>
       )}
-      <View style={[styles.iconContainer, { marginBottom: SPACING.xs }]}>
-        <View style={[
-          styles.iconBackground,
-          {
-            backgroundColor: (iconColor || colors.primary) + '15', // 15% d'opacité
-            borderRadius: BORDER_RADIUS.md,
-            padding: SPACING.sm,
-          }
-        ]}>
-          {icon}
-        </View>
+      <View style={[styles.iconContainer, { marginBottom: 0 }]}>
+        {icon}
       </View>
       <Text
         style={[
           styles.title,
           {
             color: colors.text,
-            fontSize: 9,
+            fontSize: 8,
             fontWeight: TYPOGRAPHY.weights.regular,
           },
+          titleStyle,
         ]}
         numberOfLines={2}
       >
         {title}
       </Text>
-    </Pressable>
+    </AdaptiveCard>
   );
 }
 
@@ -100,7 +88,7 @@ const styles = StyleSheet.create({
     width: '100%',
     alignItems: 'center',
     justifyContent: 'center',
-    aspectRatio: 1.05, // Plus large que haut pour réduire encore la hauteur
+    aspectRatio: 1.25,
     position: 'relative',
   },
   badge: {
@@ -111,10 +99,6 @@ const styles = StyleSheet.create({
   },
   badgeText: {},
   iconContainer: {
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  iconBackground: {
     alignItems: 'center',
     justifyContent: 'center',
   },

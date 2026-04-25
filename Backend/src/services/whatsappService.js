@@ -18,6 +18,12 @@ class WhatsAppService {
     }
   }
 
+  maskPhone(phone) {
+    const clean = String(phone || '').replace(/[^\d]/g, '');
+    if (clean.length <= 4) return clean;
+    return clean.replace(/\d(?=\d{4})/g, '*');
+  }
+
   /**
    * Envoyer un message WhatsApp
    * @param {string} to - Numéro de téléphone destinataire
@@ -35,18 +41,23 @@ class WhatsAppService {
       };
 
       logger.info('Envoi message WhatsApp', {
+        endpoint: `${this.apiUrl}/api/sessions/${this.sessionId}/send`,
         to: cleanNumber,
+        maskedTo: this.maskPhone(cleanNumber),
         messageLength: message.length
       });
 
       // Si pas d'API configurée ou clé manquante, simuler l'envoi
       if (!this.apiUrl || !this.apiKey || this.apiKey === 'your-generated-token-here') {
-        logger.info('Mode simulation WhatsApp - Message:', { to: cleanNumber, message });
+        logger.info('Mode simulation WhatsApp - Message non loggé', {
+          to: cleanNumber,
+          maskedTo: this.maskPhone(cleanNumber),
+          messageLength: message.length,
+        });
         return {
-          success: true,
-          messageId: `sim_${Date.now()}`,
-          status: 'sent',
-          simulation: true
+          success: false,
+          status: 'not_configured',
+          error: 'WHATSAPP_NOT_CONFIGURED'
         };
       }
 
@@ -63,6 +74,7 @@ class WhatsAppService {
 
       logger.info('Message WhatsApp envoyé avec succès', {
         to: cleanNumber,
+        maskedTo: this.maskPhone(cleanNumber),
         messageId: response.data?.messageId,
         status: response.data?.status
       });
@@ -76,19 +88,21 @@ class WhatsAppService {
 
     } catch (error) {
       logger.error('Erreur envoi WhatsApp', {
+        endpoint: `${this.apiUrl}/api/sessions/${this.sessionId}/send`,
         to,
+        maskedTo: this.maskPhone(to),
         error: error.message,
         status: error.response?.status,
         data: error.response?.data
       });
 
-      // En cas d'erreur, simuler l'envoi pour ne pas bloquer
+      const apiError = String(error.response?.data?.error || error.message || '').toLowerCase();
+      const looksLikeNotWhatsapp = apiError.includes('no lid for user') || apiError.includes('not a whatsapp') || apiError.includes('not registered');
+
       return {
-        success: true,
-        messageId: `fallback_${Date.now()}`,
-        status: 'sent',
-        simulation: true,
-        error: error.message
+        success: false,
+        status: 'failed',
+        error: looksLikeNotWhatsapp ? 'PHONE_NOT_ON_WHATSAPP' : 'WHATSAPP_SEND_FAILED',
       };
     }
   }
@@ -101,6 +115,10 @@ class WhatsAppService {
    * @returns {Promise<Object>} Résultat de l'envoi
    */
   async sendOTP(phoneNumber, otpCode, userName = '') {
+    logger.info('Envoi OTP WhatsApp demandé', {
+      maskedTo: this.maskPhone(phoneNumber),
+      hasUserName: Boolean(userName),
+    });
     const greeting = userName ? `Bonjour ${userName},\n\n` : 'Bonjour,\n\n';
     
     const message = `${greeting}Votre code de vérification Mossombi est : *${otpCode}*
@@ -110,7 +128,17 @@ Ne partagez jamais ce code avec personne.
 
 Équipe Mossombi 🚀`;
 
-    return await this.sendMessage(phoneNumber, message);
+    const result = await this.sendMessage(phoneNumber, message);
+
+    logger.info('Résultat envoi OTP WhatsApp', {
+      maskedTo: this.maskPhone(phoneNumber),
+      success: result?.success,
+      status: result?.status,
+      simulation: result?.simulation,
+      messageId: result?.messageId,
+    });
+
+    return result;
   }
 
   /**

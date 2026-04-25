@@ -1,13 +1,14 @@
 import React, { useState, useMemo } from 'react';
-import { ScrollView, View, TextInput, Pressable, Animated, Dimensions } from 'react-native';
+import { ScrollView, View, TextInput, Pressable, Dimensions } from 'react-native';
 import { useRouter } from 'expo-router';
-import { Search, Coins, Ticket, Hotel, Car, Plane, ShoppingBag, CreditCard, Sparkles, Package, Flame, Zap, Smartphone, Wifi } from 'lucide-react-native';
+import { Search, Coins, Ticket, Hotel, Plane, ShoppingBag, CreditCard, Sparkles, Package, Flame, Zap, Smartphone, Wifi } from 'lucide-react-native';
 import { useTheme } from '@/contexts/ThemeContext';
 import { SPACING, BORDER_RADIUS, TYPOGRAPHY } from '@/constants/colors';
-import { Heading, Body, Caption, Badge } from '@/components/atoms';
-import { Section, Stack } from '@/components/ui';
-import { PageContainer, FilterChip } from '@/components/layouts';
+import { Heading, Body, Caption } from '@/components/atoms';
+import { Stack } from '@/components/ui';
+import { PageContainer } from '@/components/layouts';
 import ServiceCard from '@/components/ServiceCard';
+import GradientBackground from '@/components/atoms/GradientBackground';
 
 const { width } = Dimensions.get('window');
 const numColumns = 4;
@@ -35,7 +36,7 @@ export default function ServicesScreen() {
     { id: 'bookings', title: 'Bookings', icon: <Plane size={32} color={colors.accent} />, category: 'Voyage' },
     { id: 'hotel', title: 'Hôtels', icon: <Hotel size={32} color={colors.primary} />, category: 'Voyage' },
     { id: 'supermarket', title: 'Supermarché', icon: <ShoppingBag size={32} color={colors.secondary} />, category: 'Shopping' },
-    { id: 'delivery', title: 'Livraison', icon: <Package size={32} color={colors.accent} />, category: 'Livraison' },
+    { id: 'delivery', title: 'Livraison', icon: <Package size={48} color={colors.accent} />, category: 'Livraison' },
     { id: 'banking', title: 'Bancaire', icon: <CreditCard size={32} color={colors.primary} />, category: 'Finance' },
     { id: 'electricity', title: 'Électricité', icon: <Zap size={32} color={colors.secondary} />, category: 'Services Public' },
     { id: 'water', title: 'Eau', icon: <Flame size={32} color={colors.accent} />, category: 'Services Public' },
@@ -59,9 +60,10 @@ export default function ServicesScreen() {
   }, [searchQuery, selectedCategory]);
 
   return (
-    <PageContainer>
-        <Stack spacing="lg">
-          <View><Heading level={1}>Services</Heading><Caption>Découvrez tous nos services</Caption></View>
+    <GradientBackground style={{ flex: 1 }} opacity="10">
+      <PageContainer style={{ backgroundColor: 'transparent' }}>
+          <Stack spacing="lg">
+            <View><Heading level={1}>Services</Heading><Caption>Découvrez tous nos services</Caption></View>
 
           <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: colors.card, borderRadius: BORDER_RADIUS.md, borderWidth: 1, borderColor: colors.border, paddingHorizontal: SPACING.md }}>
             <Search size={20} color={colors.textTertiary} />
@@ -85,7 +87,8 @@ export default function ServicesScreen() {
               </View>
             ))}
           </View>
-        </Stack>
-    </PageContainer>
+          </Stack>
+      </PageContainer>
+    </GradientBackground>
   );
 }

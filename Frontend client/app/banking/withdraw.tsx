@@ -2,16 +2,17 @@ import React, { useState } from 'react';
 import { View } from 'react-native';
 import HeaderWithBackButton from '@/components/HeaderWithBackButton';
 import { useTheme } from '@/contexts/ThemeContext';
-import { Heading, Body, Badge } from '@/components/atoms';
+import { Heading, Body } from '@/components/atoms';
 import { Section, Stack, Row } from '@/components/ui';
 import { ConfirmModal , SuccessModal } from '@/components/organisms/modals';
 import Button from '@/components/Button';
 import Input from '@/components/Input';
 import { PageContainer } from '@/components/layouts';
 import { useSuccessModal } from '@/hooks';
+import GradientBackground from '@/components/atoms/GradientBackground';
 
 export default function WithdrawScreen() {
-  const { colors } = useTheme();
+  useTheme();
   const [amount, setAmount] = useState('');
   const [method, setMethod] = useState<'atm' | 'agent' | ''>('');
   const [showConfirm, setShowConfirm] = useState(false);
@@ -37,9 +38,9 @@ export default function WithdrawScreen() {
   };
 
   return (
-    <>
+    <GradientBackground style={{ flex: 1 }} opacity="10">
       <HeaderWithBackButton title="Retrait d'argent" />
-      <PageContainer>
+      <PageContainer style={{ backgroundColor: 'transparent' }}>
         <Section>
           <Stack spacing="lg">
             <View>
@@ -71,6 +72,6 @@ export default function WithdrawScreen() {
 
       <ConfirmModal visible={showConfirm} onClose={() => setShowConfirm(false)} onConfirm={handleWithdraw} title="Confirmer le retrait" message={`Retirer ${amount} CDF ?`} type="warning" />
       <SuccessModal {...successModal.props} />
-    </>
+    </GradientBackground>
   );
 }

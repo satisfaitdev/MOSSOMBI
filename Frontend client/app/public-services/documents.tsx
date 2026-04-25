@@ -1,12 +1,11 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, StyleSheet, Pressable } from 'react-native';
+import { View, Text, TextInput, StyleSheet } from 'react-native';
 import { FileText } from 'lucide-react-native';
 import { useTheme } from '@/contexts/ThemeContext';
 import { PublicServiceFormLayout } from '@/components/templates';
 import { SelectionGrid } from '@/components/molecules';
 import { usePublicServiceForm } from '@/hooks/usePublicServiceForm';
 import { BORDER_RADIUS, SPACING, TYPOGRAPHY } from '@/constants/colors';
-import { PageContainer } from '@/components/layouts';
 import { useSuccessModal } from '@/hooks';
 import { SuccessModal } from '@/components/organisms/modals';
 
@@ -39,16 +38,8 @@ export default function DocumentsScreen() {
     );
   };
 
-  const handleRequestDocument = (docName: string) => {
-    successModal.show({
-      title: 'Demande envoyée !',
-      message: `Votre demande de ${docName} a été envoyée`,
-      animation: 'checkmark',
-    });
-  };
-
   return (
-    <PageContainer>
+    <>
       <PublicServiceFormLayout
         title="Documents Officiels"
         icon={<FileText size={64} color={colors.primary} />}
@@ -122,7 +113,7 @@ export default function DocumentsScreen() {
       </PublicServiceFormLayout>
 
       <SuccessModal {...successModal.props} />
-    </PageContainer>
+    </>
   );
 }
 

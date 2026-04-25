@@ -1,25 +1,28 @@
 import React from 'react';
-import { View, Pressable, Dimensions, Text } from 'react-native';
+import { View, Pressable, Dimensions, Text, ImageBackground } from 'react-native';
 import { useRouter } from 'expo-router';
-import { LinearGradient } from 'expo-linear-gradient';
-import { Moon, Sun, User, Bell, Lock, HelpCircle, LogOut, ChevronRight, Backpack, TrendingUp, History, Wallet, Settings, Shield, Award, Edit3, Briefcase, Users, BarChart3, FileText, DollarSign } from 'lucide-react-native';
+import { Moon, Sun, User, Bell, Lock, HelpCircle, LogOut, ChevronRight, Backpack, TrendingUp, History, Wallet, Settings, Shield, Award, Edit3, Briefcase, Users, BarChart3, FileText } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { SPACING, BORDER_RADIUS, TYPOGRAPHY, SHADOWS } from '@/constants/colors';
-import { Heading, Body, Caption, Badge } from '@/components/atoms';
-import { Section, Stack, Row } from '@/components/ui';
-import { ContentCard, PageContainer } from '@/components/layouts';
+import { Heading, Body, Caption } from '@/components/atoms';
+import { Stack, Row } from '@/components/ui';
+import { PageContainer } from '@/components/layouts';
 import AdBanner from '@/components/AdBanner';
 import { useAuth } from '@/contexts/AuthContext';
-import { useWallet } from '@/hooks/useWallet';
-import { getCountryFlag, getCurrencyByCountry, formatCurrency } from '@/utils/localization';
+import { getCountryFlag } from '@/utils/localization';
+import GradientBackground from '@/components/atoms/GradientBackground';
 
 const { width } = Dimensions.get('window');
 const numColumns = 4;
 const gap = SPACING.sm;
 const paddingHorizontal = SPACING.lg;
 const itemWidth = (width - paddingHorizontal * 2 - gap * (numColumns - 1)) / numColumns;
+
+const profileImages = {
+  headerBackground: require('@/assets/images/wallet/Walletback.webp'),
+};
 
 export default function ProfileScreen() {
   const { colors, toggleTheme, isDark } = useTheme();
@@ -29,7 +32,6 @@ export default function ProfileScreen() {
   
   // Hooks pour les données réelles
   const { user, logout } = useAuth();
-  const { wallet } = useWallet();
 
   // Fonction pour calculer l'âge à partir de la date de naissance
   const calculateAge = (dateOfBirth: string | undefined): number => {
@@ -83,8 +85,8 @@ export default function ProfileScreen() {
   ];
 
   const proActions = [
-    { id: 'agent', title: 'Agent', icon: <Briefcase size={20} color={colors.primary} />, onPress: () => router.push('/agent' as any) },
-    { id: 'team', title: 'Équipe', icon: <Users size={20} color={colors.secondary} />, onPress: () => router.push('/team' as any) },
+    { id: 'agent', title: 'Agent', icon: <Briefcase size={20} color={colors.primary} />, onPress: () => router.push('/agency' as any) },
+    { id: 'team', title: 'Équipe', icon: <Users size={20} color={colors.secondary} />, onPress: () => router.push('/agent/management' as any) },
     { id: 'stats', title: 'Stats', icon: <BarChart3 size={20} color={colors.accent} />, onPress: () => router.push('/stats' as any) },
     { id: 'reports', title: 'Rapports', icon: <FileText size={20} color={colors.primary} />, onPress: () => router.push('/reports' as any) },
   ];
@@ -97,13 +99,21 @@ export default function ProfileScreen() {
   ];
 
   return (
-    <PageContainer
-      scrollable
-      horizontalPadding={SPACING.lg}
-      verticalPadding={insets.top + SPACING.lg}
-    >
-      <Stack spacing="lg" style={{ paddingBottom: 100 }}>
-          <LinearGradient colors={[colors.gradient.start, colors.gradient.middle, colors.gradient.end]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={{ borderRadius: BORDER_RADIUS.xl, padding: SPACING.lg, alignItems: 'center', ...SHADOWS.lg, position: 'relative' }}>
+    <GradientBackground style={{ flex: 1 }} opacity="10">
+      <View style={{ height: insets.top }} />
+      <PageContainer
+        scrollable
+        horizontalPadding={SPACING.lg}
+        verticalPadding={SPACING.lg}
+        style={{ backgroundColor: 'transparent' }}
+      >
+        <Stack spacing="lg" style={{ paddingBottom: 100 }}>
+          <ImageBackground
+            source={profileImages.headerBackground}
+            resizeMode="stretch"
+            imageStyle={{ borderRadius: BORDER_RADIUS.xl }}
+            style={{ borderRadius: BORDER_RADIUS.xl, padding: SPACING.lg, alignItems: 'center', ...SHADOWS.lg, position: 'relative', overflow: 'hidden' }}
+          >
             {/* Bouton d'édition en haut à droite */}
             <Pressable
               onPress={() => router.push('/profile/edit' as any)}
@@ -170,7 +180,7 @@ export default function ProfileScreen() {
                 <View style={{ width: `${progress}%`, height: '100%', backgroundColor: '#FFFFFF', borderRadius: BORDER_RADIUS.sm }} />
               </View>
             </View>
-          </LinearGradient>
+          </ImageBackground>
 
           <View><Heading level={3}>{t('Accès rapide' as any)}</Heading></View>
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap }}>
@@ -246,5 +256,6 @@ export default function ProfileScreen() {
           </Pressable>
         </Stack>
       </PageContainer>
+    </GradientBackground>
   );
 }

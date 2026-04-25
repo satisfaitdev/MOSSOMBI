@@ -3,6 +3,7 @@ import { View, Text } from 'react-native';
 import { Check } from 'lucide-react-native';
 import { useTheme } from '@/contexts/ThemeContext';
 import { SPACING, TYPOGRAPHY } from '@/constants/colors';
+import { LinearGradient } from 'expo-linear-gradient';
 
 export interface Step {
   id: number;
@@ -22,30 +23,7 @@ interface StepperProps {
 }
 
 /**
- * Composant Stepper horizontal
- * 
- * Fonctionnalités:
- * - Affichage des étapes avec numéros
- * - Indicateur visuel de progression
- * - Checkmarks pour les étapes complétées
- * - Barre de progression optionnelle
- * - Titres optionnels
- * 
- * @example
- * ```tsx
- * const steps = [
- *   { id: 0, title: 'Informations', icon: '📝' },
- *   { id: 1, title: 'Paiement', icon: '💳' },
- *   { id: 2, title: 'Confirmation', icon: '✓' },
- * ];
- * 
- * <Stepper
- *   steps={steps}
- *   currentStep={1}
- *   showTitles
- *   showProgressBar
- * />
- * ```
+ * Composant Stepper horizontal - Style LuxiGlass
  */
 export const Stepper: React.FC<StepperProps> = ({
   steps,
@@ -53,74 +31,114 @@ export const Stepper: React.FC<StepperProps> = ({
   showTitles = false,
   showProgressBar = true,
 }) => {
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
 
   return (
-    <View style={{ backgroundColor: colors.card, paddingVertical: SPACING.md, paddingHorizontal: SPACING.lg, borderBottomWidth: 1, borderBottomColor: colors.border }}>
+    <View style={{ paddingVertical: SPACING.md, paddingHorizontal: SPACING.lg, backgroundColor: 'transparent' }}>
       {/* Stepper horizontal */}
       <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: showProgressBar ? SPACING.sm : 0 }}>
-        {steps.map((step, index) => (
-          <View key={step.id} style={{ alignItems: 'center', flex: 1 }}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', width: '100%' }}>
-              {/* Cercle numéroté */}
-              <View style={{
-                width: 32,
-                height: 32,
-                borderRadius: 16,
-                backgroundColor: currentStep >= index ? colors.primary : colors.surface,
-                alignItems: 'center',
-                justifyContent: 'center',
-                borderWidth: 2,
-                borderColor: currentStep >= index ? colors.primary : colors.border
-              }}>
-                {currentStep > index ? (
-                  <Check size={16} color="#FFFFFF" />
-                ) : (
-                  <Text style={{
-                    color: currentStep === index ? '#FFFFFF' : colors.textTertiary,
-                    fontSize: TYPOGRAPHY.sizes.xs,
-                    fontWeight: TYPOGRAPHY.weights.bold
+        {steps.map((step, index) => {
+          const isCompleted = currentStep > index;
+          const isActive = currentStep === index;
+          const isPending = currentStep < index;
+
+          return (
+            <View key={step.id} style={{ alignItems: 'center', flex: 1 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', width: '100%' }}>
+                {/* Cercle numéroté / Checkmark */}
+                <View style={{
+                  width: 32,
+                  height: 32,
+                  borderRadius: 16,
+                  backgroundColor: isActive || isCompleted ? 'transparent' : (isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.03)'),
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  borderWidth: 2,
+                  borderColor: isPending ? (isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)') : 'transparent',
+                  overflow: 'hidden'
+                }}>
+                  {isActive || isCompleted ? (
+                    <LinearGradient
+                      colors={[colors.gradient.start, colors.gradient.end]}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 1 }}
+                      style={{
+                        position: 'absolute',
+                        top: 0,
+                        left: 0,
+                        right: 0,
+                        bottom: 0,
+                        opacity: isActive ? 1 : 0.8
+                      }}
+                    />
+                  ) : null}
+
+                  {isCompleted ? (
+                    <Check size={16} color="#FFFFFF" strokeWidth={3} />
+                  ) : (
+                    <Text style={{
+                      color: isActive ? '#FFFFFF' : colors.textTertiary,
+                      fontSize: TYPOGRAPHY.sizes.sm,
+                      fontWeight: TYPOGRAPHY.weights.bold,
+                      zIndex: 1
+                    }}>
+                      {index + 1}
+                    </Text>
+                  )}
+                </View>
+
+                {/* Ligne de connexion */}
+                {index < steps.length - 1 && (
+                  <View style={{
+                    flex: 1,
+                    height: 3,
+                    marginHorizontal: 8,
+                    borderRadius: 2,
+                    backgroundColor: isCompleted ? 'transparent' : (isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.05)'),
+                    overflow: 'hidden'
                   }}>
-                    {index + 1}
-                  </Text>
+                    {isCompleted && (
+                      <LinearGradient
+                        colors={[colors.gradient.start, colors.gradient.end]}
+                        start={{ x: 0, y: 0 }}
+                        end={{ x: 1, y: 0 }}
+                        style={{ flex: 1 }}
+                      />
+                    )}
+                  </View>
                 )}
               </View>
-              
-              {/* Ligne de connexion */}
-              {index < steps.length - 1 && (
-                <View style={{
-                  flex: 1,
-                  height: 2,
-                  backgroundColor: currentStep > index ? colors.primary : colors.border,
-                  marginHorizontal: 4
-                }} />
+
+              {/* Titre optionnel */}
+              {showTitles && (
+                <Text style={{
+                  color: isActive || isCompleted ? colors.text : colors.textTertiary,
+                  fontSize: TYPOGRAPHY.sizes.xs,
+                  fontWeight: isActive ? TYPOGRAPHY.weights.bold : TYPOGRAPHY.weights.medium,
+                  marginTop: SPACING.sm,
+                  textAlign: 'center',
+                  opacity: isActive || isCompleted ? 1 : 0.6
+                }} numberOfLines={1}>
+                  {step.title}
+                </Text>
               )}
             </View>
-            
-            {/* Titre optionnel */}
-            {showTitles && (
-              <Text style={{
-                color: currentStep >= index ? colors.text : colors.textSecondary,
-                fontSize: TYPOGRAPHY.sizes.xs,
-                fontWeight: currentStep === index ? TYPOGRAPHY.weights.semibold : TYPOGRAPHY.weights.regular,
-                marginTop: SPACING.xs,
-                textAlign: 'center'
-              }} numberOfLines={1}>
-                {step.title}
-              </Text>
-            )}
-          </View>
-        ))}
+          );
+        })}
       </View>
-      
-      {/* Barre de progression */}
+
+      {/* Barre de progression (Optionnelle, mais redesignée si utilisée) */}
       {showProgressBar && (
-        <View style={{ height: 4, backgroundColor: colors.surface, borderRadius: 2, overflow: 'hidden' }}>
-          <View style={{
-            height: '100%',
-            backgroundColor: colors.primary,
-            width: `${((currentStep + 1) / steps.length) * 100}%`
-          }} />
+        <View style={{ height: 4, backgroundColor: isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.05)', borderRadius: 2, overflow: 'hidden', marginTop: SPACING.sm }}>
+          <LinearGradient
+            colors={[colors.gradient.start, colors.gradient.end]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0 }}
+            style={{
+              height: '100%',
+              width: `${((currentStep) / (steps.length - 1)) * 100}%`
+            }}
+          />
         </View>
       )}
     </View>

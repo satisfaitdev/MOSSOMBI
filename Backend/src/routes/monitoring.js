@@ -34,7 +34,7 @@ router.get('/health', asyncHandler(async (req, res) => {
           stats: redisStats
         },
         database: {
-          connected: true, // Supabase toujours connecté
+          connected: true,
           audit_tables: true
         },
         monitoring: {
@@ -216,7 +216,7 @@ router.get('/system-info', authenticateToken, asyncHandler(async (req, res) => {
         host: process.env.REDIS_HOST || 'not configured'
       },
       database: {
-        provider: 'Supabase',
+        provider: 'PostgreSQL',
         connected: true
       },
       monitoring: {

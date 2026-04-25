@@ -13,6 +13,7 @@ import { useFormState, useToggleState } from '@/hooks/useCommonState';
 import Input from '@/components/Input';
 import Button from '@/components/Button';
 import { SuccessModal } from '@/components/organisms/modals';
+import GradientBackground from '@/components/atoms/GradientBackground';
 
 export default function HelpScreen() {
   const { colors } = useTheme();
@@ -120,9 +121,9 @@ export default function HelpScreen() {
   ];
 
   return (
-    <>
+    <GradientBackground style={{ flex: 1 }} opacity="10">
       <HeaderWithBackButton title="Aide & Support" />
-      <PageContainer>
+      <PageContainer style={{ backgroundColor: 'transparent' }}>
         <Stack spacing="xl">
             {/* Contact rapide */}
             <View>
@@ -203,6 +204,6 @@ export default function HelpScreen() {
       </PageContainer>
 
       <SuccessModal {...successModal.props} />
-    </>
+    </GradientBackground>
   );
 }

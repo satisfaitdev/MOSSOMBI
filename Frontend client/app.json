@@ -1,0 +1,62 @@
+{
+  "expo": {
+    "name": "Mossombi",
+    "slug": "mossombi",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/images/icon.png",
+    "scheme": "mossombi",
+    "userInterfaceStyle": "automatic",
+    "splash": {
+      "image": "./assets/images/splash-icon-light.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.mossombi.app",
+      "infoPlist": {
+        "NSFaceIDUsageDescription": "Mossombi utilise Face ID pour sécuriser votre compte et vos transactions financières.",
+        "NSLocationWhenInUseUsageDescription": "Mossombi utilise votre position pour configurer automatiquement la devise et les services adaptés à votre pays."
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/images/android-adaptive-icon.png",
+        "backgroundColor": "#ffffff"
+      },
+      "package": "com.mossombi.app",
+      "permissions": ["ACCESS_FINE_LOCATION", "ACCESS_COARSE_LOCATION"]
+    },
+    "web": {
+      "favicon": "./assets/images/favicon.png",
+      "bundler": "metro"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-splash-screen",
+      "expo-local-authentication",
+      "expo-location",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/notification-icon.png",
+          "color": "#ffffff",
+          "defaultChannel": "default"
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true
+    },
+    "extra": {
+      "apiBaseUrl": "http://192.168.152.94:3000/api/v1",
+      "appName": "Mossombi",
+      "appVersion": "1.0.0",
+      "environment": "development"
+    }
+  }
+}

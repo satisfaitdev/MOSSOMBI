@@ -34,7 +34,7 @@ export default function GradientBackground({
       colors={gradientColors}
       start={{ x: 0, y: 0 }}
       end={{ x: 1, y: 1 }}
-      style={style}
+      style={[{ backgroundColor: colors.background }, style]}
     >
       {children}
     </LinearGradient>

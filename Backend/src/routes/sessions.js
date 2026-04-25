@@ -5,7 +5,7 @@
 
 import express from 'express';
 import Joi from 'joi';
-import { supabaseAdmin } from '../config/supabase.js';
+import { dbAdmin } from '../config/db.js';
 import { asyncHandler, ValidationError, NotFoundError } from '../middleware/errorHandler.js';
 import { authenticateToken, logUserAction } from '../middleware/auth.js';
 import { logger } from '../utils/logger.js';
@@ -76,7 +76,7 @@ const getLocationFromIP = (ip) => {
 
 // Nettoyer les sessions expirées
 const cleanExpiredSessions = async (userId) => {
-  const { error } = await supabaseAdmin
+  const { error } = await dbAdmin
     .from('user_sessions')
     .delete()
     .eq('user_id', userId)
@@ -100,7 +100,7 @@ router.get('/', authenticateToken, asyncHandler(async (req, res) => {
   await cleanExpiredSessions(req.user.id);
 
   // Récupérer les sessions actives
-  const { data: sessions, error } = await supabaseAdmin
+  const { data: sessions, error } = await dbAdmin
     .from('user_sessions')
     .select(`
       id,
@@ -169,7 +169,7 @@ router.post('/', authenticateToken, logUserAction('session_create'), asyncHandle
 
   do {
     sessionToken = generateSessionToken();
-    const { data: existingSession } = await supabaseAdmin
+    const { data: existingSession } = await dbAdmin
       .from('user_sessions')
       .select('id')
       .eq('session_token', sessionToken)
@@ -184,7 +184,7 @@ router.post('/', authenticateToken, logUserAction('session_create'), asyncHandle
   }
 
   // Créer la session
-  const { data: newSession, error: insertError } = await supabaseAdmin
+  const { data: newSession, error: insertError } = await dbAdmin
     .from('user_sessions')
     .insert({
       user_id: req.user.id,
@@ -211,7 +211,7 @@ router.post('/', authenticateToken, logUserAction('session_create'), asyncHandle
   }
 
   // Nettoyer les anciennes sessions (garder max 10 sessions par utilisateur)
-  const { data: allSessions } = await supabaseAdmin
+  const { data: allSessions } = await dbAdmin
     .from('user_sessions')
     .select('id, created_at')
     .eq('user_id', req.user.id)
@@ -219,7 +219,7 @@ router.post('/', authenticateToken, logUserAction('session_create'), asyncHandle
 
   if (allSessions && allSessions.length > 10) {
     const sessionsToDelete = allSessions.slice(10).map(s => s.id);
-    await supabaseAdmin
+    await dbAdmin
       .from('user_sessions')
       .delete()
       .in('id', sessionsToDelete);
@@ -254,7 +254,7 @@ router.put('/:id/activity', authenticateToken, asyncHandler(async (req, res) => 
   }
 
   // Vérifier que la session appartient à l'utilisateur
-  const { data: existingSession } = await supabaseAdmin
+  const { data: existingSession } = await dbAdmin
     .from('user_sessions')
     .select('id, is_active')
     .eq('id', sessionId)
@@ -270,7 +270,7 @@ router.put('/:id/activity', authenticateToken, asyncHandler(async (req, res) => 
   }
 
   // Mettre à jour l'activité
-  const { data: updatedSession, error: updateError } = await supabaseAdmin
+  const { data: updatedSession, error: updateError } = await dbAdmin
     .from('user_sessions')
     .update({
       last_activity_at: new Date().toISOString(),
@@ -313,7 +313,7 @@ router.delete('/:id', authenticateToken, logUserAction('session_terminate'), asy
   }
 
   // Vérifier que la session appartient à l'utilisateur
-  const { data: existingSession } = await supabaseAdmin
+  const { data: existingSession } = await dbAdmin
     .from('user_sessions')
     .select('id')
     .eq('id', sessionId)
@@ -325,11 +325,11 @@ router.delete('/:id', authenticateToken, logUserAction('session_terminate'), asy
   }
 
   // Désactiver la session
-  const { error: updateError } = await supabaseAdmin
+  const { error: updateError } = await dbAdmin
     .from('user_sessions')
     .update({
       is_active: false,
-      last_activity_at: new Date().toISOString()
+      terminated_at: new Date().toISOString()
     })
     .eq('id', sessionId)
     .eq('user_id', req.user.id);
@@ -355,11 +355,11 @@ router.delete('/:id', authenticateToken, logUserAction('session_terminate'), asy
  */
 router.delete('/all', authenticateToken, logUserAction('sessions_terminate_all'), asyncHandler(async (req, res) => {
   // Désactiver toutes les sessions de l'utilisateur
-  const { data: terminatedSessions, error: updateError } = await supabaseAdmin
+  const { data: terminatedSessions, error: updateError } = await dbAdmin
     .from('user_sessions')
     .update({
       is_active: false,
-      last_activity_at: new Date().toISOString()
+      terminated_at: new Date().toISOString()
     })
     .eq('user_id', req.user.id)
     .eq('is_active', true)
@@ -391,7 +391,7 @@ router.get('/stats', authenticateToken, asyncHandler(async (req, res) => {
   await cleanExpiredSessions(req.user.id);
 
   // Récupérer toutes les sessions de l'utilisateur
-  const { data: sessions, error } = await supabaseAdmin
+  const { data: sessions, error } = await dbAdmin
     .from('user_sessions')
     .select('device_type, os_name, location_country, is_active, created_at, last_activity_at')
     .eq('user_id', req.user.id);

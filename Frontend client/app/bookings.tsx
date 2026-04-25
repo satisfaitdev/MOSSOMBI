@@ -12,8 +12,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/contexts/ThemeContext';
 import CategoryCard from '@/components/molecules/CategoryCard';
-import PageContainer from '@/components/layouts/PageContainer';
-import HeaderWithBackButton from '@/components/HeaderWithBackButton';
+import { CategoryPageLayout } from '@/components/templates';
 
 interface BookingService {
   id: string;
@@ -93,7 +92,34 @@ export default function BookingsScreen() {
   };
 
   return (
-    <PageContainer>
+    <CategoryPageLayout
+      title="Réservations"
+      backgroundIcons={
+        <>
+          <Hotel
+            size={100}
+            color="#FFFFFF"
+            style={{ opacity: 0.65, position: 'absolute', top: insets.top + 20, left: 45 }}
+          />
+          <Plane
+            size={85}
+            color="#FFFFFF"
+            style={{
+              opacity: 0.6,
+              position: 'absolute',
+              top: insets.top + 35,
+              right: 40,
+              transform: [{ rotate: '10deg' }],
+            }}
+          />
+          <MapPin
+            size={70}
+            color="#FFFFFF"
+            style={{ opacity: 0.6, position: 'absolute', top: insets.top + 75, left: '46%' }}
+          />
+        </>
+      }
+    >
       {services.map((service) => (
         <CategoryCard
           key={service.id}
@@ -104,6 +130,6 @@ export default function BookingsScreen() {
           onPress={() => handleServicePress(service.route)}
         />
       ))}
-    </PageContainer>
+    </CategoryPageLayout>
   );
 }

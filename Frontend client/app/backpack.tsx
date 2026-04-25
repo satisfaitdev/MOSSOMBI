@@ -8,6 +8,7 @@ import { SPACING, BORDER_RADIUS, TYPOGRAPHY, SHADOWS } from '@/constants/colors'
 import { Heading, Body, Caption, Badge } from '@/components/atoms';
 import { Stack, Row } from '@/components/ui';
 import { PageContainer, ContentCard, FilterChip } from '@/components/layouts';
+import GradientBackground from '@/components/atoms/GradientBackground';
 
 export default function BackpackScreen() {
   const { colors } = useTheme();
@@ -99,9 +100,9 @@ export default function BackpackScreen() {
   };
 
   return (
-    <>
+    <GradientBackground style={{ flex: 1 }} opacity="10">
       <HeaderWithBackButton title="Sac à dos" />
-      <PageContainer>
+      <PageContainer style={{ backgroundColor: 'transparent' }}>
           <Stack spacing="lg">
             {/* En-tête avec gradient */}
             <LinearGradient
@@ -230,6 +231,6 @@ export default function BackpackScreen() {
             </View>
           </Stack>
       </PageContainer>
-    </>
+    </GradientBackground>
   );
 }

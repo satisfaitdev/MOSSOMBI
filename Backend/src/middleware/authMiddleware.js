@@ -3,7 +3,7 @@
  */
 
 import SecurityService from '../services/securityService.js';
-import { supabaseAdmin } from '../config/supabase.js';
+import { dbAdmin } from '../config/db.js';
 import { logger } from '../utils/logger.js';
 
 /**
@@ -29,7 +29,7 @@ const authenticateToken = async (req, res, next) => {
     console.log('✅ Backend - Token décodé:', { userId: decoded.userId, exp: decoded.exp });
     
     // Récupérer l'utilisateur depuis la base de données
-    const { data: user, error } = await supabaseAdmin
+    const { data: user, error } = await dbAdmin
       .from('users')
       .select('*')
       .eq('id', decoded.userId)
@@ -72,7 +72,11 @@ const authenticateToken = async (req, res, next) => {
  * Middleware pour vérifier les permissions d'administration
  */
 const requireAdmin = (req, res, next) => {
-  if (!req.user || !req.user.is_super_admin) {
+  const role = req.user?.role;
+  const isSuper = Boolean(req.user?.is_super_admin);
+  const isAdminRole = role === 'admin' || role === 'super_admin';
+
+  if (!req.user || (!isAdminRole && !isSuper)) {
     return res.status(403).json({
       success: false,
       error: 'Accès administrateur requis',
@@ -92,7 +96,7 @@ const optionalAuth = async (req, res, next) => {
 
     if (token) {
       const decoded = SecurityService.verifyToken(token);
-      const { data: user } = await supabaseAdmin
+      const { data: user } = await dbAdmin
         .from('users')
         .select('*')
         .eq('id', decoded.userId)

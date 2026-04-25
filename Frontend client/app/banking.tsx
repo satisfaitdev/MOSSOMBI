@@ -1,12 +1,10 @@
 import React from 'react';
-import { View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { CreditCard, Send, Wallet, PiggyBank } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/contexts/ThemeContext';
 import CategoryCard from '@/components/molecules/CategoryCard';
-import PageContainer from '@/components/layouts/PageContainer';
-import HeaderWithBackButton from '@/components/HeaderWithBackButton';
+import { CategoryPageLayout } from '@/components/templates';
 
 interface BankingService {
   id: string;
@@ -62,36 +60,34 @@ export default function BankingScreen() {
   };
 
   return (
-    <PageContainer>
-      <HeaderWithBackButton title="Banque" />
-      <View
-        style={{
-          position: 'absolute',
-          top: insets.top + 20,
-          left: 45,
-        }}
-      >
-        <CreditCard size={100} color="#FFFFFF" style={{ opacity: 0.65 }} />
-      </View>
-      <View
-        style={{
-          position: 'absolute',
-          top: insets.top + 35,
-          right: 40,
-          transform: [{ rotate: '10deg' }],
-        }}
-      >
-        <Wallet size={85} color="#FFFFFF" style={{ opacity: 0.6 }} />
-      </View>
-      <View
-        style={{
-          position: 'absolute',
-          top: insets.top + 75,
-          left: '46%',
-        }}
-      >
-        <Send size={70} color="#FFFFFF" style={{ opacity: 0.6 }} />
-      </View>
+    <CategoryPageLayout
+      title="Banque"
+      backgroundIcons={
+        <>
+          <CreditCard
+            size={100}
+            color="#FFFFFF"
+            style={{ opacity: 0.65, position: 'absolute', top: insets.top + 20, left: 45 }}
+          />
+          <Wallet
+            size={85}
+            color="#FFFFFF"
+            style={{
+              opacity: 0.6,
+              position: 'absolute',
+              top: insets.top + 35,
+              right: 40,
+              transform: [{ rotate: '10deg' }],
+            }}
+          />
+          <Send
+            size={70}
+            color="#FFFFFF"
+            style={{ opacity: 0.6, position: 'absolute', top: insets.top + 75, left: '46%' }}
+          />
+        </>
+      }
+    >
       {services.map((service) => (
         <CategoryCard
           key={service.id}
@@ -102,6 +98,6 @@ export default function BankingScreen() {
           onPress={() => handleServicePress(service.route)}
         />
       ))}
-    </PageContainer>
+    </CategoryPageLayout>
   );
 }

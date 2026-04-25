@@ -13,6 +13,7 @@ import { useSuccessModal } from '@/hooks';
 import { SuccessModal } from '@/components/organisms/modals';
 import Button from '@/components/Button';
 import Input from '@/components/Input';
+import GradientBackground from '@/components/atoms/GradientBackground';
 
 const PACKAGE_TYPES = [
   { id: 'small', name: 'Petit Colis', subtitle: '< 5kg', price: 2000, icon: '📦' },
@@ -76,9 +77,9 @@ export default function PackageScreen() {
   const selectedPackage = PACKAGE_TYPES.find(p => p.id === packageType);
 
   return (
-    <>
+    <GradientBackground style={{ flex: 1 }} opacity="10">
       <HeaderWithBackButton title="Livraison de colis" />
-      <PageContainer scrollable={false}>
+      <PageContainer scrollable={false} style={{ backgroundColor: 'transparent' }}>
         <ScrollView contentContainerStyle={{ paddingBottom: 100 }} showsVerticalScrollIndicator={false}>
           <Stack spacing="lg">
             <Stepper steps={steps} currentStep={currentStep} showProgressBar />
@@ -162,6 +163,6 @@ export default function PackageScreen() {
         </View>
       </PageContainer>
       <SuccessModal {...successModal.props} />
-    </>
+    </GradientBackground>
   );
 }

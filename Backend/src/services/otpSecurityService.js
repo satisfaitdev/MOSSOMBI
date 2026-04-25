@@ -300,6 +300,10 @@ class OTPSecurityService {
 export const otpSecurityService = new OTPSecurityService();
 
 // Nettoyage automatique toutes les heures
-setInterval(() => {
+const interval = setInterval(() => {
   otpSecurityService.cleanup();
 }, 60 * 60 * 1000);
+
+if (process.env.NODE_ENV === 'test') {
+  interval.unref();
+}

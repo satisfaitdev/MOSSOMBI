@@ -11,6 +11,7 @@ import { useSuccessModal } from '@/hooks';
 import { SuccessModal } from '@/components/organisms/modals';
 import Button from '@/components/Button';
 import HeaderWithBackButton from '@/components/HeaderWithBackButton';
+import GradientBackground from '@/components/atoms/GradientBackground';
 
 export default function VirtualCardScreen() {
   const { colors } = useTheme();
@@ -29,9 +30,9 @@ export default function VirtualCardScreen() {
   };
 
   return (
-    <>
+    <GradientBackground style={{ flex: 1 }} opacity="10">
       <HeaderWithBackButton title="Carte virtuelle" />
-      <PageContainer>
+      <PageContainer style={{ backgroundColor: 'transparent' }}>
         <Stack spacing="lg">
           <View>
             <Heading level={2}>Ma carte virtuelle</Heading>
@@ -80,6 +81,6 @@ export default function VirtualCardScreen() {
         </Stack>
       </PageContainer>
       <SuccessModal {...successModal.props} />
-    </>
+    </GradientBackground>
   );
 }

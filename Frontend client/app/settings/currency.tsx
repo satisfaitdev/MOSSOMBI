@@ -5,7 +5,6 @@
 
 import React, { useState } from 'react';
 import { View, ScrollView, Switch, Alert, Pressable } from 'react-native';
-import { useRouter } from 'expo-router';
 import { Check, DollarSign, RefreshCw, Info } from 'lucide-react-native';
 import HeaderWithBackButton from '@/components/HeaderWithBackButton';
 import Button from '@/components/Button';
@@ -13,7 +12,6 @@ import { useTheme } from '@/contexts/ThemeContext';
 import { useUserPreferences } from '@/contexts/UserPreferencesContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { useRealExchangeRates } from '@/hooks/useRealExchangeRates';
-import { updateExchangeRates } from '@/utils/localization';
 import { SPACING, BORDER_RADIUS, TYPOGRAPHY, SHADOWS } from '@/constants/colors';
 import { Heading, Body, Caption } from '@/components/atoms';
 import { Stack, Row } from '@/components/ui';
@@ -25,11 +23,11 @@ import {
   convertFromXAF,
   EXCHANGE_RATES 
 } from '@/utils/localization';
+import GradientBackground from '@/components/atoms/GradientBackground';
 
 export default function CurrencySettingsScreen() {
   const { colors } = useTheme();
-  const router = useRouter();
-  const { user } = useAuth();
+  useAuth();
   const { 
     preferences, 
     updatePreferredCurrency, 
@@ -40,9 +38,7 @@ export default function CurrencySettingsScreen() {
   
   // Hook pour les taux de change réels
   const { 
-    rates, 
     isLoading: ratesLoading, 
-    isError: ratesError, 
     lastUpdated, 
     cacheAgeMinutes, 
     refreshRates, 
@@ -168,9 +164,9 @@ export default function CurrencySettingsScreen() {
   };
 
   return (
-    <>
+    <GradientBackground style={{ flex: 1 }} opacity="10">
       <HeaderWithBackButton title="Devise & Conversion" />
-      <PageContainer>
+      <PageContainer style={{ backgroundColor: 'transparent' }}>
 
         <ScrollView showsVerticalScrollIndicator={false}>
           <Stack spacing="lg">
@@ -323,6 +319,6 @@ export default function CurrencySettingsScreen() {
           </Stack>
         </ScrollView>
       </PageContainer>
-    </>
+    </GradientBackground>
   );
 }

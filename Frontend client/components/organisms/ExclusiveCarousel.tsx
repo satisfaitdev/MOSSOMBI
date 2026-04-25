@@ -2,6 +2,8 @@ import React, { useRef, useState, useEffect } from 'react';
 import { View, ScrollView, Dimensions } from 'react-native';
 import { useTheme } from '@/contexts/ThemeContext';
 import { SPACING } from '@/constants/colors';
+import { COMMON_STYLES } from '@/constants/styles';
+import GradientDot from '@/components/atoms/GradientDot';
 
 const { width } = Dimensions.get('window');
 
@@ -32,7 +34,7 @@ export default function ExclusiveCarousel<T extends { id: string }>({
   const { colors } = useTheme();
   const scrollViewRef = useRef<ScrollView>(null);
   const [scrollPosition, setScrollPosition] = useState(0);
-  const cardWidth = width - SPACING.md * 2; // Augmentation de la largeur des cartes exclusives
+  const cardWidth = width - (SPACING.md * 2);
 
   // Auto-scroll
   useEffect(() => {
@@ -63,7 +65,9 @@ export default function ExclusiveCarousel<T extends { id: string }>({
       <ScrollView
         ref={scrollViewRef}
         horizontal
-        pagingEnabled
+        pagingEnabled={false}
+        snapToInterval={cardWidth + cardGap}
+        decelerationRate="fast"
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={{
           paddingHorizontal: SPACING.md, // Cohérent avec la largeur des cartes
@@ -82,24 +86,37 @@ export default function ExclusiveCarousel<T extends { id: string }>({
       {/* Pagination dots */}
       {items.length > 1 && (
         <View
-          style={{
-            flexDirection: 'row',
-            justifyContent: 'center',
-            alignItems: 'center',
-            gap: SPACING.xs,
-            marginTop: SPACING.md,
-          }}
+          style={[
+            COMMON_STYLES.rowCenter,
+            {
+              justifyContent: 'center',
+              alignItems: 'center',
+              gap: SPACING.xs,
+              marginTop: SPACING.md,
+            }
+          ]}
         >
           {items.map((_, index) => {
             const isActive = Math.round(scrollPosition / (cardWidth + cardGap)) === index;
+
+            if (isActive) {
+              return (
+                <GradientDot
+                  key={index}
+                  width={20}
+                  height={8}
+                />
+              );
+            }
+
             return (
               <View
                 key={index}
                 style={{
                   height: 8,
                   borderRadius: 4,
-                  backgroundColor: isActive ? colors.primary : colors.border,
-                  width: isActive ? 20 : 8,
+                  backgroundColor: colors.border,
+                  width: 8,
                 }}
               />
             );

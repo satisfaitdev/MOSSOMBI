@@ -10,6 +10,7 @@ import Input from '@/components/Input';
 import HeaderWithBackButton from '@/components/HeaderWithBackButton';
 import { PageContainer } from '@/components/layouts';
 import { useSuccessModal } from '@/hooks';
+import GradientBackground from '@/components/atoms/GradientBackground';
 
 export default function TransferScreen() {
   const { colors } = useTheme();
@@ -42,9 +43,9 @@ export default function TransferScreen() {
   };
 
   return (
-    <>
+    <GradientBackground style={{ flex: 1 }} opacity="10">
       <HeaderWithBackButton title="Transfert d'argent" />
-      <PageContainer>
+      <PageContainer style={{ backgroundColor: 'transparent' }}>
         <Section>
           <Stack spacing="lg">
             <View>
@@ -115,6 +116,6 @@ export default function TransferScreen() {
         />
       </PageContainer>
       <SuccessModal {...successModal.props} />
-    </>
+    </GradientBackground>
   );
 }

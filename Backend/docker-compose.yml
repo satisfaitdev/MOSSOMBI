@@ -1,0 +1,36 @@
+services:
+  postgres:
+    image: postgis/postgis:15-3.4
+    container_name: mossombi-postgis
+    deploy:
+      restart_policy:
+        condition: unless-stopped
+    environment:
+      POSTGRES_DB: mossombi
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: Kbg-0042
+    ports:
+      - "15432:5432"
+    volumes:
+      - mossombi_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d mossombi"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    container_name: mossombi-redis
+    deploy:
+      restart_policy:
+        condition: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "6379:6379"
+    volumes:
+      - mossombi_redisdata:/data
+
+volumes:
+  mossombi_pgdata:
+  mossombi_redisdata:

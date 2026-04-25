@@ -1,15 +1,16 @@
 import React, { useState, useMemo } from 'react';
-import { View, Pressable } from 'react-native';
+import { View, Pressable, ScrollView } from 'react-native';
 import { Bell, Gift, AlertCircle, CheckCircle, Info, Trash2 } from 'lucide-react-native';
 import GradientIcon from '@/components/atoms/GradientIcon';
 import GradientDot from '@/components/atoms/GradientDot';
 import GradientBackground from '@/components/atoms/GradientBackground';
-import HeaderWithBackButton from '@/components/HeaderWithBackButton';
 import { useTheme } from '@/contexts/ThemeContext';
 import { SPACING, BORDER_RADIUS, TYPOGRAPHY, SHADOWS } from '@/constants/colors';
 import { Heading, Body, Caption } from '@/components/atoms';
 import { Stack, Row } from '@/components/ui';
-import { PageContainer } from '@/components/layouts';
+import { useRouter } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { ChevronLeft } from 'lucide-react-native';
 
 // Types
 type NotificationType = 'info' | 'success' | 'warning' | 'promo';
@@ -36,7 +37,9 @@ const INITIAL_NOTIFICATIONS: Notification[] = [
 ];
 
 export default function NotificationsScreen() {
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
+  const insets = useSafeAreaInsets();
+  const router = useRouter();
   const [notifications, setNotifications] = useState(INITIAL_NOTIFICATIONS);
 
   // Configuration des icônes et couleurs par type
@@ -62,14 +65,51 @@ export default function NotificationsScreen() {
   const unreadCount = useMemo(() => notifications.filter(n => !n.read).length, [notifications]);
 
   return (
-    <>
-      <HeaderWithBackButton title="Notifications" />
-      <PageContainer>
+    <GradientBackground style={{ flex: 1 }} opacity="10">
+      <View style={{ height: insets.top }} />
+
+      {/* Header (same style as supermarket) */}
+      <View
+        style={{
+          flexDirection: 'row',
+          alignItems: 'center',
+          paddingHorizontal: SPACING.lg,
+          paddingVertical: SPACING.sm,
+          gap: SPACING.md,
+          zIndex: 10,
+        }}
+      >
+        <Pressable
+          onPress={() => router.back()}
+          style={({ pressed }) => [
+            {
+              width: 36,
+              height: 36,
+              borderRadius: 20,
+              backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)',
+              alignItems: 'center',
+              justifyContent: 'center',
+              transform: [{ scale: pressed ? 0.9 : 1 }],
+            },
+          ]}
+        >
+          <ChevronLeft color={colors.text} size={22} />
+        </Pressable>
+
+        <View style={{ flex: 1 }}>
+          <Heading level={3} style={{ textAlign: 'center' }}>Notifications</Heading>
+        </View>
+
+        <View style={{ width: 36, height: 36 }} />
+      </View>
+
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={{ paddingHorizontal: SPACING.lg, paddingBottom: insets.bottom + SPACING.xl }}
+      >
         <Stack spacing="lg">
           {/* Badge de notifications non lues */}
-          {unreadCount > 0 && (
-            <UnreadBadge count={unreadCount} colors={colors} />
-          )}
+          {unreadCount > 0 && <UnreadBadge count={unreadCount} colors={colors} />}
 
           {/* Liste des notifications */}
           {notifications.length === 0 ? (
@@ -89,8 +129,8 @@ export default function NotificationsScreen() {
             </Stack>
           )}
         </Stack>
-      </PageContainer>
-    </>
+      </ScrollView>
+    </GradientBackground>
   );
 }
 

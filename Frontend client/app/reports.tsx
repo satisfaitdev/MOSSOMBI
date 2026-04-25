@@ -8,6 +8,7 @@ import { Heading, Body, Caption, Badge } from '@/components/atoms';
 import { Stack, Row } from '@/components/ui';
 import { PageContainer, ContentCard, FilterChip } from '@/components/layouts';
 import Button from '@/components/Button';
+import GradientBackground from '@/components/atoms/GradientBackground';
 
 export default function ReportsScreen() {
   const { colors } = useTheme();
@@ -60,9 +61,9 @@ export default function ReportsScreen() {
   };
 
   return (
-    <>
+    <GradientBackground style={{ flex: 1 }} opacity="10">
       <HeaderWithBackButton title="Rapports" />
-      <PageContainer>
+      <PageContainer style={{ backgroundColor: 'transparent' }}>
           <Stack spacing="lg">
             {/* Générer un nouveau rapport */}
             <View>
@@ -218,6 +219,6 @@ export default function ReportsScreen() {
             />
           </Stack>
       </PageContainer>
-    </>
+    </GradientBackground>
   );
 }

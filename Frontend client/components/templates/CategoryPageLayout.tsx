@@ -1,5 +1,15 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, Pressable, ScrollView, StyleSheet, Animated, Dimensions } from 'react-native';
+import {
+  View,
+  Text,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Animated,
+  Dimensions,
+  KeyboardAvoidingView,
+  Platform,
+} from 'react-native';
 import { X } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
@@ -47,7 +57,7 @@ export default function CategoryPageLayout({
   return (
     <View style={{ flex: 1 }}>
       <StatusBar style="light" translucent={true} backgroundColor="transparent" />
-      
+
       {/* Background Gradient avec icônes décoratives */}
       <LinearGradient
         colors={[colors.primary, colors.secondary, colors.accent]}
@@ -61,7 +71,7 @@ export default function CategoryPageLayout({
       {/* Overlay et Modal */}
       <View style={styles.overlay}>
         <Pressable style={styles.backdrop} onPress={handleClose} />
-        
+
         <Animated.View
           style={[
             styles.modalContainer,
@@ -113,19 +123,20 @@ export default function CategoryPageLayout({
               </Pressable>
             </View>
 
-            {/* Contenu scrollable */}
-            <ScrollView
-              showsVerticalScrollIndicator={false}
-              contentContainerStyle={{
-                paddingHorizontal: SPACING.lg,
-                paddingBottom: SPACING.xxl + insets.bottom + 50,
-              }}
+            <KeyboardAvoidingView
+              behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+              style={{ flex: 1 }}
             >
-              {/* Grille de catégories */}
-              <View style={styles.grid}>
-                {children}
-              </View>
-            </ScrollView>
+              <ScrollView
+                showsVerticalScrollIndicator={false}
+                contentContainerStyle={{
+                  paddingHorizontal: SPACING.lg,
+                  paddingBottom: SPACING.xxl + insets.bottom + 50,
+                }}
+              >
+                <View style={styles.grid}>{children}</View>
+              </ScrollView>
+            </KeyboardAvoidingView>
           </View>
         </Animated.View>
       </View>

@@ -35,6 +35,14 @@ class NotificationService {
    */
   async initialize(): Promise<string | null> {
     try {
+      // Expo Go: éviter l'enregistrement push distant (peut provoquer des erreurs Keychain sur iOS)
+      // On garde uniquement les notifications locales.
+      if (Constants.appOwnership === 'expo') {
+        console.log('📱 Mode Expo Go détecté : notifications push distantes désactivées');
+        await this.setupLocalNotifications();
+        return 'local-only-mode';
+      }
+
       // Vérifier si c'est un appareil physique
       if (!Device.isDevice) {
         console.log('📱 Mode développement : notifications locales seulement');

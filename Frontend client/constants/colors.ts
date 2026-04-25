@@ -1,3 +1,11 @@
+export const DSFR_COLORS = {
+  blue: '#000091',
+  blueHover: '#1212ff',
+  background: '#F6F6F6',
+  text: '#1E1E1E',
+  border: '#E5E5E5',
+};
+
 export const Colors = {
   light: {
     primary: '#0891B2', // Bleu clair du dégradé comme couleur principale
@@ -6,6 +14,10 @@ export const Colors = {
     accent: '#FFB347',
     background: '#FFFFFF',
     surface: '#F8F9FA',
+    surfaceVariant: '#F3F4F6',
+    secondaryContainer: '#E0F2FE',
+    outline: '#E5E7EB',
+    outlineVariant: '#F3F4F6',
     card: '#FFFFFF',
     text: '#1A1A1A',
     textSecondary: '#6B7280',
@@ -34,6 +46,10 @@ export const Colors = {
     accent: '#FFB347',
     background: '#0F172A',
     surface: '#1E293B',
+    surfaceVariant: '#334155',
+    secondaryContainer: '#1E3A8A',
+    outline: '#475569',
+    outlineVariant: '#334155',
     card: '#1E293B',
     text: '#F8FAFC',
     textSecondary: '#CBD5E1',
@@ -154,26 +170,26 @@ export const ANIMATIONS = {
 export const LAYOUT = {
   // Padding horizontal standard pour toutes les pages
   screenPadding: SPACING.sm, // 12px (réduit pour plus d'espace)
-  
+
   // Padding vertical pour le contenu scrollable
   scrollContentPadding: {
     top: SPACING.md,
     bottom: SPACING.xl,
   },
-  
+
   // Espacement entre les sections
   sectionSpacing: SPACING.lg,
-  
+
   // Espacement entre les éléments d'une même section
   itemSpacing: SPACING.md,
-  
+
   // Style prêt à l'emploi pour ScrollView
   scrollViewContent: {
     paddingHorizontal: SPACING.sm,  // 12px gauche/droite
     paddingTop: SPACING.lg,         // Espace en haut pour ne pas coller au header
     paddingBottom: SPACING.xl,
   },
-  
+
   // Style prêt à l'emploi pour les sections
   section: {
     marginBottom: SPACING.lg,

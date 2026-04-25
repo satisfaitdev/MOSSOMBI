@@ -26,6 +26,7 @@ import PhoneNumberCard from './components/PhoneNumberCard';
 import OperatorCard from './components/OperatorCard';
 import SuccessModal from '@/components/organisms/modals/SuccessModal';
 import { useSuccessModal } from '@/hooks/useSuccessModal';
+import GradientBackground from '@/components/atoms/GradientBackground';
 
 // Méthodes disponibles pour le retrait (sans carte bancaire)
 const WITHDRAW_METHODS = PAYMENT_METHODS.filter(m => m.id !== 'card');
@@ -420,12 +421,12 @@ export default function WithdrawScreen() {
   };
 
   return (
-    <>
+    <GradientBackground style={{ flex: 1 }} opacity="10">
       <HeaderWithBackButton 
         title={getHeaderTitle()} 
         onBack={state.step !== 'amount' ? handleBackPress : undefined}
       />
-      <PageContainer>
+      <PageContainer style={{ backgroundColor: 'transparent' }}>
         {state.step === 'amount' && renderAmountStep()}
         {state.step === 'phone' && renderPhoneStep()}
         {state.step === 'confirmation' && renderConfirmationStep()}
@@ -623,6 +624,6 @@ export default function WithdrawScreen() {
 
       {/* Modal de succès standardisé */}
       <SuccessModal {...successModal.props} />
-    </>
+    </GradientBackground>
   );
 }

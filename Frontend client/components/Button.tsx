@@ -4,6 +4,8 @@ import { ActivityIndicator, Pressable, StyleSheet, Text, View, StyleProp, ViewSt
 import { useTheme } from '@/contexts/ThemeContext';
 import { BORDER_RADIUS, SHADOWS, SPACING, TYPOGRAPHY } from '@/constants/colors';
 import { GRADIENTS } from '@/constants/gradients';
+import { AdaptiveButton } from '@/components/ui/AdaptiveButton';
+import { AdaptiveText } from '@/components/ui/AdaptiveText';
 import {
   ANIMATION_DURATIONS,
   ANIMATION_VALUES,
@@ -41,6 +43,63 @@ export default function Button({
   withAnimation = false,
 }: ButtonProps) {
   const { colors } = useTheme();
+
+  // Use the new adaptive design system for the common button variants.
+  // Keep the legacy gradient variants and animation mode untouched.
+  if (!withAnimation && variant !== 'gradient' && variant !== 'gradient3d') {
+    const adaptiveVariant: React.ComponentProps<typeof AdaptiveButton>['variant'] =
+      variant === 'outline' ? 'secondary' :
+      variant === 'ghost' ? 'tertiary' :
+      variant === 'secondary' ? 'surface' :
+      'primary';
+
+    const adaptiveSize: React.ComponentProps<typeof AdaptiveButton>['size'] =
+      size === 'xs' || size === 'sm' ? 'sm' :
+      size === 'lg' ? 'lg' :
+      'md';
+
+    const textColor =
+      adaptiveVariant === 'primary' ? '#FFFFFF' :
+      adaptiveVariant === 'secondary' ? colors.primary :
+      adaptiveVariant === 'tertiary' ? colors.primary :
+      colors.text;
+
+    const backgroundOverride =
+      variant === 'danger' ? { backgroundColor: colors.error, borderColor: 'transparent', borderWidth: 0 } :
+      variant === 'success' ? { backgroundColor: colors.success, borderColor: 'transparent', borderWidth: 0 } :
+      undefined;
+
+    return (
+      <View style={fullWidth ? styles.fullWidth : undefined}>
+        <AdaptiveButton
+          variant={adaptiveVariant}
+          size={adaptiveSize}
+          disabled={disabled}
+          loading={loading}
+          onPress={onPress}
+          style={[fullWidth ? styles.fullWidth : undefined, backgroundOverride, style]}
+        >
+          <View style={[styles.content, { gap: SPACING.sm }]}>
+            {icon}
+            <AdaptiveText
+              variant="body"
+              weight="semibold"
+              color={textColor}
+              style={{
+                fontSize:
+                  size === 'xs' ? TYPOGRAPHY.sizes.xs :
+                  size === 'sm' ? TYPOGRAPHY.sizes.sm :
+                  size === 'lg' ? TYPOGRAPHY.sizes.lg :
+                  TYPOGRAPHY.sizes.md,
+              }}
+            >
+              {title}
+            </AdaptiveText>
+          </View>
+        </AdaptiveButton>
+      </View>
+    );
+  }
 
   // Animations seulement si withAnimation est activé
   const scaleAnim = React.useRef(new Animated.Value(1)).current;

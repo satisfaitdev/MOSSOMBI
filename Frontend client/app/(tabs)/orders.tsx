@@ -1,12 +1,13 @@
 import React, { useState } from 'react';
-import { ScrollView, View, Pressable } from 'react-native';
+import { ScrollView, View } from 'react-native';
 import { Package, Clock, CheckCircle, XCircle, ShoppingBag, Plane, Zap, Truck, Ticket } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/contexts/ThemeContext';
-import { SPACING, BORDER_RADIUS, TYPOGRAPHY, SHADOWS } from '@/constants/colors';
+import { SPACING, BORDER_RADIUS, TYPOGRAPHY } from '@/constants/colors';
 import { Heading, Body, Caption, Badge } from '@/components/atoms';
 import { Stack, Row } from '@/components/ui';
 import { ContentCard, FilterChip } from '@/components/layouts';
+import GradientBackground from '@/components/atoms/GradientBackground';
 
 interface Order {
   id: string;
@@ -82,8 +83,9 @@ export default function OrdersScreen() {
   };
 
   return (
-    <View style={{ flex: 1, backgroundColor: colors.background }}>
-      <ScrollView contentContainerStyle={{ padding: SPACING.lg, paddingTop: insets.top + SPACING.lg }}>
+    <GradientBackground style={{ flex: 1 }} opacity="10">
+      <View style={{ height: insets.top }} />
+      <ScrollView contentContainerStyle={{ padding: SPACING.lg, paddingTop: SPACING.lg }}>
         <Stack spacing="lg">
           <View><Heading level={1}>Mes Commandes</Heading><Caption>Suivez l&apos;état de vos transactions</Caption></View>
 
@@ -174,6 +176,6 @@ export default function OrdersScreen() {
           </View>
         </Stack>
       </ScrollView>
-    </View>
+    </GradientBackground>
   );
 }

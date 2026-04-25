@@ -8,6 +8,7 @@ import { SPACING, BORDER_RADIUS, TYPOGRAPHY, SHADOWS } from '@/constants/colors'
 import { Heading, Body, Caption, Badge } from '@/components/atoms';
 import { Stack, Row } from '@/components/ui';
 import { PageContainer } from '@/components/layouts';
+import GradientBackground from '@/components/atoms/GradientBackground';
 
 export default function LevelScreen() {
   const { colors } = useTheme();
@@ -51,8 +52,10 @@ export default function LevelScreen() {
   const progress = (currentLevel.points / currentLevel.nextLevelPoints) * 100;
 
   return (
-    <PageContainer>
-      <Stack spacing="lg">
+    <GradientBackground style={{ flex: 1 }} opacity="10">
+      <HeaderWithBackButton title="Niveau" />
+      <PageContainer style={{ backgroundColor: 'transparent' }}>
+        <Stack spacing="lg">
         {/* Niveau actuel avec gradient */}
         <LinearGradient
           colors={[currentLevel.color + 'CC', currentLevel.color + '88', currentLevel.color + 'CC']}
@@ -254,5 +257,6 @@ export default function LevelScreen() {
             </View>
         </Stack>
       </PageContainer>
+    </GradientBackground>
   );
 }

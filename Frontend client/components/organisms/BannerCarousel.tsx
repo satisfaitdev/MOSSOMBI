@@ -19,19 +19,23 @@ interface BannerCarouselProps {
   peekAmount?: number; // Quantité de peek du banner suivant
 }
 
-export default function BannerCarousel({ 
-  banners, 
+export default function BannerCarousel({
+  banners,
   autoScrollInterval = 4000,
   showPagination = true,
-  peekAmount = 30
+  peekAmount = 0
 }: BannerCarouselProps) {
   const { colors } = useTheme();
   const { width } = useWindowDimensions();
   const [scrollPosition, setScrollPosition] = useState(0);
   const scrollViewRef = useRef<ScrollView>(null);
 
-  // Largeur de chaque item avec peek
-  const itemWidth = width - (SPACING.md * 2) - peekAmount;
+  const effectivePeek = banners.length > 1 ? peekAmount : 0;
+
+  // Largeur de chaque item
+  // - Sans peek: même largeur visuelle que les autres cartes (Wallet) => width - padding page
+  // - Avec peek (optionnel): réduit légèrement la largeur
+  const itemWidth = width - (SPACING.md * 2) - effectivePeek;
 
   // Auto-scroll
   useEffect(() => {
@@ -67,16 +71,16 @@ export default function BannerCarousel({
         decelerationRate="fast"
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={{
-          paddingLeft: SPACING.md,
-          paddingRight: SPACING.md + peekAmount,
+          paddingLeft: 0,
+          paddingRight: effectivePeek,
         }}
         onScroll={(e) => setScrollPosition(e.nativeEvent.contentOffset.x)}
         scrollEventThrottle={16}
       >
         {banners.map((banner, index) => (
-          <View 
-            key={banner.id} 
-            style={{ 
+          <View
+            key={banner.id}
+            style={{
               width: itemWidth,
               marginRight: index < banners.length - 1 ? SPACING.sm : 0
             }}
@@ -95,12 +99,12 @@ export default function BannerCarousel({
       {/* Pagination dots */}
       {showPagination && banners.length > 1 && (
         <View style={[
-          COMMON_STYLES.rowCenter, 
+          COMMON_STYLES.rowCenter,
           { justifyContent: 'center', marginTop: SPACING.sm, gap: SPACING.xs }
         ]}>
           {banners.map((_, index) => {
             const isActive = Math.round(scrollPosition / (itemWidth + SPACING.sm)) === index;
-            
+
             if (isActive) {
               return (
                 <GradientDot
@@ -110,7 +114,7 @@ export default function BannerCarousel({
                 />
               );
             }
-            
+
             return (
               <View
                 key={index}

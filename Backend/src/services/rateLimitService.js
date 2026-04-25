@@ -48,7 +48,10 @@ class RateLimitService {
     };
 
     // Nettoyage automatique toutes les 10 minutes
-    setInterval(() => this.cleanup(), 10 * 60 * 1000);
+    const interval = setInterval(() => this.cleanup(), 10 * 60 * 1000);
+    if (process.env.NODE_ENV === 'test') {
+      interval.unref();
+    }
   }
 
   /**

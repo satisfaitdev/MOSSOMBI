@@ -7,6 +7,7 @@ import { SPACING, BORDER_RADIUS, TYPOGRAPHY, SHADOWS } from '@/constants/colors'
 import { Heading, Body, Caption, Badge } from '@/components/atoms';
 import { Stack, Row } from '@/components/ui';
 import { PageContainer, ContentCard } from '@/components/layouts';
+import GradientBackground from '@/components/atoms/GradientBackground';
 
 export default function HelpCenterScreen() {
   const { colors } = useTheme();
@@ -34,9 +35,9 @@ export default function HelpCenterScreen() {
   ];
 
   return (
-    <>
+    <GradientBackground style={{ flex: 1 }} opacity="10">
       <HeaderWithBackButton title="Centre d'aide" />
-      <PageContainer>
+      <PageContainer style={{ backgroundColor: 'transparent' }}>
           <Stack spacing="lg">
             {/* Barre de recherche */}
             <View>
@@ -199,6 +200,6 @@ export default function HelpCenterScreen() {
             </View>
         </Stack>
       </PageContainer>
-    </>
+    </GradientBackground>
   );
 }

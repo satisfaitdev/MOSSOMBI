@@ -9,6 +9,7 @@ import { Row, Section, Stack } from '@/components/ui';
 import PageContainer from '@/components/layouts/PageContainer';
 import WalletCard from '@/components/WalletCard';
 import { useWallet } from '@/hooks/useWallet';
+import GradientBackground from '@/components/atoms/GradientBackground';
 
 interface Transaction {
   id: string;
@@ -43,14 +44,15 @@ export default function WalletScreen() {
   };
 
   return (
-    <PageContainer>
-        <WalletCard 
-          balance={wallet.balance} 
-          points={wallet.points} 
-          isLoading={wallet.isLoading}
-          onRecharge={() => router.push('/wallet/recharge')} 
-          onWithdraw={() => router.push('/wallet/withdraw')} 
-        />
+    <GradientBackground style={{ flex: 1 }} opacity="10">
+      <PageContainer style={{ backgroundColor: 'transparent' }}>
+          <WalletCard 
+            balance={wallet.balance} 
+            points={wallet.points} 
+            isLoading={wallet.isLoading}
+            onRecharge={() => router.push('/wallet/recharge')} 
+            onWithdraw={() => router.push('/wallet/withdraw')} 
+          />
 
         <Row spacing="md" style={{ marginTop: SPACING.xl }}>
           <Section variant="elevated" style={{ flex: 1 }}>
@@ -103,6 +105,7 @@ export default function WalletScreen() {
             ))}
           </Stack>
         </View>
-    </PageContainer>
+      </PageContainer>
+    </GradientBackground>
   );
 }

@@ -3,565 +3,281 @@
  * Détection et gestion des sessions multiples et suspectes
  */
 
-import crypto from 'crypto';
+import SessionCore from './session/sessionCore.js';
+import SessionManager from './session/sessionManager.js';
+import SessionSecurity from './session/sessionSecurity.js';
 import { logger } from '../utils/logger.js';
 
 class SessionSecurityService {
   constructor() {
-    // Stockage des sessions actives
-    this.activeSessions = new Map(); // userId -> [session1, session2, ...]
+    // Initialiser les composants
+    this.core = new SessionCore();
+    this.manager = new SessionManager(this.core);
+    this.security = new SessionSecurity(this.core);
     
-    // Stockage des appareils connus
-    this.knownDevices = new Map(); // userId -> [device1, device2, ...]
-    
-    // Configuration
-    this.config = {
-      maxSessionsPerUser: 3,        // Maximum 3 sessions simultanées
-      sessionTimeout: 24 * 60 * 60 * 1000, // 24 heures
-      deviceTrustDuration: 30 * 24 * 60 * 60 * 1000, // 30 jours
-      suspiciousLoginThreshold: 5,   // 5 connexions suspectes = alerte
-      geoLocationRadius: 100        // 100km de différence = suspect
-    };
+    this.initialized = true;
+  }
 
-    // Nettoyage automatique toutes les heures
-    setInterval(() => this.cleanup(), 60 * 60 * 1000);
+  /**
+   * Initialiser le service
+   */
+  async initialize() {
+    try {
+      // Le service est déjà initialisé dans le constructeur
+      logger.info('Service de sécurité des sessions initialisé');
+    } catch (error) {
+      logger.error('Erreur initialisation service sécurité sessions:', error);
+      throw error;
+    }
   }
 
   /**
    * Créer une nouvelle session
-   * @param {string} userId - ID de l'utilisateur
-   * @param {Object} deviceInfo - Informations de l'appareil
-   * @param {Object} locationInfo - Informations de géolocalisation
-   * @returns {Object} Informations de la session
    */
   createSession(userId, deviceInfo, locationInfo = {}) {
-    const sessionId = this.generateSessionId();
-    const now = Date.now();
-    
-    const session = {
-      sessionId,
-      userId,
-      createdAt: now,
-      lastActivity: now,
-      deviceInfo: {
-        userAgent: deviceInfo.userAgent || 'Unknown',
-        ip: deviceInfo.ip || 'Unknown',
-        platform: this.extractPlatform(deviceInfo.userAgent),
-        browser: this.extractBrowser(deviceInfo.userAgent),
-        fingerprint: this.generateDeviceFingerprint(deviceInfo)
-      },
-      locationInfo: {
-        country: locationInfo.country || 'Unknown',
-        city: locationInfo.city || 'Unknown',
-        coordinates: locationInfo.coordinates || null,
-        timezone: locationInfo.timezone || null
-      },
-      isActive: true,
-      isSuspicious: false,
-      riskScore: 0
-    };
-
-    // Analyser la session pour détecter les anomalies
-    const analysis = this.analyzeSession(userId, session);
-    session.isSuspicious = analysis.isSuspicious;
-    session.riskScore = analysis.riskScore;
-    session.alerts = analysis.alerts;
-
-    // Ajouter à la liste des sessions actives
-    const userSessions = this.activeSessions.get(userId) || [];
-    userSessions.push(session);
-
-    // Limiter le nombre de sessions
-    if (userSessions.length > this.config.maxSessionsPerUser) {
-      const oldestSession = userSessions.shift();
-      logger.warn('Session fermée automatiquement (limite atteinte)', {
-        userId,
-        closedSessionId: oldestSession.sessionId,
-        totalSessions: userSessions.length
-      });
+    if (!this.initialized) {
+      logger.warn('Service sécurité sessions non initialisé');
+      return null;
     }
 
-    this.activeSessions.set(userId, userSessions);
-
-    // Enregistrer l'appareil si nouveau et non suspect
-    if (!analysis.isSuspicious) {
-      this.registerDevice(userId, session.deviceInfo);
-    }
-
-    logger.info('Nouvelle session créée', {
-      userId,
-      sessionId,
-      platform: session.deviceInfo.platform,
-      browser: session.deviceInfo.browser,
-      isSuspicious: session.isSuspicious,
-      riskScore: session.riskScore
-    });
-
-    return {
-      sessionId,
-      isSuspicious: session.isSuspicious,
-      riskScore: session.riskScore,
-      alerts: session.alerts,
-      activeSessions: userSessions.length
-    };
+    return this.manager.createSession(userId, deviceInfo, locationInfo);
   }
 
   /**
-   * Analyser une session pour détecter les anomalies
-   * @param {string} userId - ID de l'utilisateur
-   * @param {Object} session - Informations de la session
-   * @returns {Object} Résultat de l'analyse
+   * Analyser une tentative de connexion pour la sécurité
    */
-  analyzeSession(userId, session) {
-    const alerts = [];
-    let riskScore = 0;
-    let isSuspicious = false;
-
-    // 1. Vérifier si l'appareil est connu
-    const isKnownDevice = this.isDeviceKnown(userId, session.deviceInfo);
-    if (!isKnownDevice) {
-      alerts.push('Nouvel appareil détecté');
-      riskScore += 3;
+  analyzeLoginAttempt(userId, deviceInfo, locationInfo, loginResult) {
+    if (!this.initialized) {
+      return {
+        riskScore: 0,
+        alerts: [],
+        isBlocked: false,
+        recommendations: []
+      };
     }
 
-    // 2. Vérifier les sessions simultanées
-    const currentSessions = this.activeSessions.get(userId) || [];
-    if (currentSessions.length >= this.config.maxSessionsPerUser) {
-      alerts.push('Nombre maximum de sessions atteint');
-      riskScore += 2;
-    }
-
-    // 3. Analyser la géolocalisation
-    const locationAnalysis = this.analyzeLocation(userId, session.locationInfo);
-    if (locationAnalysis.isSuspicious) {
-      alerts.push(...locationAnalysis.alerts);
-      riskScore += locationAnalysis.riskScore;
-    }
-
-    // 4. Analyser les patterns temporels
-    const timeAnalysis = this.analyzeTimePattern(userId, session);
-    if (timeAnalysis.isSuspicious) {
-      alerts.push(...timeAnalysis.alerts);
-      riskScore += timeAnalysis.riskScore;
-    }
-
-    // 5. Vérifier l'historique des connexions suspectes
-    const suspiciousHistory = this.getSuspiciousLoginCount(userId);
-    if (suspiciousHistory >= this.config.suspiciousLoginThreshold) {
-      alerts.push('Historique de connexions suspectes');
-      riskScore += 4;
-      isSuspicious = true;
-    }
-
-    // Déterminer si la session est suspecte
-    if (riskScore >= 5) {
-      isSuspicious = true;
-    }
-
-    return {
-      isSuspicious,
-      riskScore,
-      alerts
-    };
-  }
-
-  /**
-   * Analyser la géolocalisation
-   * @param {string} userId - ID de l'utilisateur
-   * @param {Object} locationInfo - Informations de localisation
-   * @returns {Object} Résultat de l'analyse
-   */
-  analyzeLocation(userId, locationInfo) {
-    const alerts = [];
-    let riskScore = 0;
-    let isSuspicious = false;
-
-    const recentSessions = this.getRecentSessions(userId, 24 * 60 * 60 * 1000); // 24h
-    
-    if (recentSessions.length > 0) {
-      const lastLocation = recentSessions[recentSessions.length - 1].locationInfo;
-      
-      // Vérifier le changement de pays
-      if (lastLocation.country && locationInfo.country && 
-          lastLocation.country !== locationInfo.country) {
-        alerts.push(`Connexion depuis un nouveau pays: ${locationInfo.country}`);
-        riskScore += 3;
-      }
-
-      // Vérifier la distance géographique (si coordonnées disponibles)
-      if (lastLocation.coordinates && locationInfo.coordinates) {
-        const distance = this.calculateDistance(
-          lastLocation.coordinates,
-          locationInfo.coordinates
-        );
-        
-        if (distance > this.config.geoLocationRadius) {
-          alerts.push(`Connexion à ${Math.round(distance)}km de la dernière localisation`);
-          riskScore += 2;
-        }
-      }
-
-      // Vérifier les connexions simultanées depuis différents pays
-      const activeCountries = new Set(
-        recentSessions
-          .filter(s => s.isActive)
-          .map(s => s.locationInfo.country)
-          .filter(Boolean)
-      );
-      
-      if (activeCountries.size > 1) {
-        alerts.push('Sessions actives depuis plusieurs pays');
-        riskScore += 4;
-        isSuspicious = true;
-      }
-    }
-
-    return { isSuspicious, riskScore, alerts };
-  }
-
-  /**
-   * Analyser les patterns temporels
-   * @param {string} userId - ID de l'utilisateur
-   * @param {Object} session - Session actuelle
-   * @returns {Object} Résultat de l'analyse
-   */
-  analyzeTimePattern(userId, session) {
-    const alerts = [];
-    let riskScore = 0;
-    let isSuspicious = false;
-
-    const recentSessions = this.getRecentSessions(userId, 60 * 60 * 1000); // 1h
-
-    // Vérifier les connexions trop rapprochées
-    if (recentSessions.length > 5) {
-      alerts.push('Connexions très fréquentes détectées');
-      riskScore += 2;
-    }
-
-    // Vérifier les connexions à des heures inhabituelles
-    const hour = new Date(session.createdAt).getHours();
-    if (hour >= 2 && hour <= 5) { // 2h-5h du matin
-      alerts.push('Connexion à une heure inhabituelle');
-      riskScore += 1;
-    }
-
-    return { isSuspicious, riskScore, alerts };
+    return this.security.analyzeLoginAttempt(userId, deviceInfo, locationInfo, loginResult);
   }
 
   /**
    * Mettre à jour l'activité d'une session
-   * @param {string} sessionId - ID de la session
-   * @param {string} userId - ID de l'utilisateur
    */
-  updateSessionActivity(sessionId, userId) {
-    const userSessions = this.activeSessions.get(userId) || [];
-    const session = userSessions.find(s => s.sessionId === sessionId);
-    
-    if (session) {
-      session.lastActivity = Date.now();
-    }
+  updateSessionActivity(sessionId) {
+    if (!this.initialized) return null;
+    return this.manager.updateSessionActivity(sessionId);
   }
 
   /**
    * Fermer une session
-   * @param {string} sessionId - ID de la session
-   * @param {string} userId - ID de l'utilisateur
-   * @param {string} reason - Raison de la fermeture
    */
-  closeSession(sessionId, userId, reason = 'user_logout') {
-    const userSessions = this.activeSessions.get(userId) || [];
-    const sessionIndex = userSessions.findIndex(s => s.sessionId === sessionId);
-    
-    if (sessionIndex !== -1) {
-      const session = userSessions[sessionIndex];
-      session.isActive = false;
-      session.closedAt = Date.now();
-      session.closeReason = reason;
-      
-      userSessions.splice(sessionIndex, 1);
-      this.activeSessions.set(userId, userSessions);
-      
-      logger.info('Session fermée', {
-        userId,
-        sessionId,
-        reason,
-        duration: session.closedAt - session.createdAt
-      });
-    }
+  closeSession(sessionId) {
+    if (!this.initialized) return null;
+    return this.manager.closeSession(sessionId);
   }
 
   /**
    * Fermer toutes les sessions d'un utilisateur
-   * @param {string} userId - ID de l'utilisateur
-   * @param {string} reason - Raison de la fermeture
    */
-  closeAllUserSessions(userId, reason = 'security_action') {
-    const userSessions = this.activeSessions.get(userId) || [];
-    const sessionCount = userSessions.length;
-    
-    userSessions.forEach(session => {
-      session.isActive = false;
-      session.closedAt = Date.now();
-      session.closeReason = reason;
-    });
-    
-    this.activeSessions.delete(userId);
-    
-    logger.warn('Toutes les sessions fermées', {
-      userId,
-      sessionCount,
-      reason
-    });
-    
-    return sessionCount;
+  closeAllUserSessions(userId) {
+    if (!this.initialized) return 0;
+    return this.manager.closeAllUserSessions(userId);
   }
 
   /**
    * Obtenir les sessions actives d'un utilisateur
-   * @param {string} userId - ID de l'utilisateur
-   * @returns {Array} Liste des sessions actives
    */
-  getUserActiveSessions(userId) {
-    const sessions = this.activeSessions.get(userId) || [];
-    return sessions.map(session => ({
-      sessionId: session.sessionId,
-      createdAt: session.createdAt,
-      lastActivity: session.lastActivity,
-      platform: session.deviceInfo.platform,
-      browser: session.deviceInfo.browser,
-      location: `${session.locationInfo.city}, ${session.locationInfo.country}`,
-      isSuspicious: session.isSuspicious,
-      riskScore: session.riskScore
-    }));
+  getUserSessions(userId) {
+    if (!this.initialized) return [];
+    return this.core.getUserSessions(userId);
   }
 
   /**
-   * Vérifier si un appareil est connu
-   * @param {string} userId - ID de l'utilisateur
-   * @param {Object} deviceInfo - Informations de l'appareil
-   * @returns {boolean} True si l'appareil est connu
+   * Obtenir les appareils connus d'un utilisateur
    */
-  isDeviceKnown(userId, deviceInfo) {
-    const knownDevices = this.knownDevices.get(userId) || [];
-    const deviceFingerprint = deviceInfo.fingerprint;
-    
-    return knownDevices.some(device => 
-      device.fingerprint === deviceFingerprint &&
-      Date.now() - device.lastSeen < this.config.deviceTrustDuration
-    );
+  getUserDevices(userId) {
+    if (!this.initialized) return [];
+    return this.core.getUserDevices(userId);
   }
 
   /**
-   * Enregistrer un nouvel appareil
-   * @param {string} userId - ID de l'utilisateur
-   * @param {Object} deviceInfo - Informations de l'appareil
+   * Obtenir les sessions suspectes
    */
-  registerDevice(userId, deviceInfo) {
-    const knownDevices = this.knownDevices.get(userId) || [];
-    
-    const device = {
-      fingerprint: deviceInfo.fingerprint,
-      platform: deviceInfo.platform,
-      browser: deviceInfo.browser,
-      firstSeen: Date.now(),
-      lastSeen: Date.now(),
-      trustLevel: 'new'
-    };
-    
-    knownDevices.push(device);
-    
-    // Garder seulement les 10 appareils les plus récents
-    if (knownDevices.length > 10) {
-      knownDevices.sort((a, b) => b.lastSeen - a.lastSeen);
-      knownDevices.splice(10);
-    }
-    
-    this.knownDevices.set(userId, knownDevices);
-    
-    logger.info('Nouvel appareil enregistré', {
-      userId,
-      platform: device.platform,
-      browser: device.browser
-    });
+  getSuspiciousSessions() {
+    if (!this.initialized) return [];
+    return this.security.getSuspiciousSessions();
   }
 
   /**
-   * Générer un ID de session unique
-   * @returns {string} ID de session
+   * Obtenir les sessions par appareil
    */
-  generateSessionId() {
-    return crypto.randomBytes(32).toString('hex');
+  getSessionsByDevice(fingerprint) {
+    if (!this.initialized) return [];
+    return this.manager.getSessionsByDevice(fingerprint);
   }
 
   /**
-   * Générer une empreinte d'appareil
-   * @param {Object} deviceInfo - Informations de l'appareil
-   * @returns {string} Empreinte de l'appareil
+   * Vérifier si une IP est bloquée
    */
-  generateDeviceFingerprint(deviceInfo) {
-    const data = [
-      deviceInfo.userAgent || '',
-      deviceInfo.platform || '',
-      deviceInfo.language || '',
-      deviceInfo.timezone || '',
-      deviceInfo.screenResolution || ''
-    ].join('|');
-    
-    return crypto.createHash('sha256').update(data).digest('hex');
+  isIPBlocked(ip) {
+    if (!this.initialized) return false;
+    return this.security.isIPBlocked(ip);
   }
 
   /**
-   * Extraire la plateforme depuis le User-Agent
-   * @param {string} userAgent - User-Agent
-   * @returns {string} Plateforme détectée
+   * Obtenir les statistiques générales
    */
-  extractPlatform(userAgent = '') {
-    if (/iPhone|iPad|iPod/.test(userAgent)) return 'iOS';
-    if (/Android/.test(userAgent)) return 'Android';
-    if (/Windows/.test(userAgent)) return 'Windows';
-    if (/Macintosh|Mac OS/.test(userAgent)) return 'macOS';
-    if (/Linux/.test(userAgent)) return 'Linux';
-    return 'Unknown';
-  }
-
-  /**
-   * Extraire le navigateur depuis le User-Agent
-   * @param {string} userAgent - User-Agent
-   * @returns {string} Navigateur détecté
-   */
-  extractBrowser(userAgent = '') {
-    if (/Chrome/.test(userAgent)) return 'Chrome';
-    if (/Firefox/.test(userAgent)) return 'Firefox';
-    if (/Safari/.test(userAgent) && !/Chrome/.test(userAgent)) return 'Safari';
-    if (/Edge/.test(userAgent)) return 'Edge';
-    if (/Opera/.test(userAgent)) return 'Opera';
-    return 'Unknown';
-  }
-
-  /**
-   * Obtenir les sessions récentes d'un utilisateur
-   * @param {string} userId - ID de l'utilisateur
-   * @param {number} timeWindow - Fenêtre de temps en ms
-   * @returns {Array} Sessions récentes
-   */
-  getRecentSessions(userId, timeWindow) {
-    const allSessions = this.activeSessions.get(userId) || [];
-    const cutoff = Date.now() - timeWindow;
-    
-    return allSessions.filter(session => session.createdAt > cutoff);
-  }
-
-  /**
-   * Obtenir le nombre de connexions suspectes
-   * @param {string} userId - ID de l'utilisateur
-   * @returns {number} Nombre de connexions suspectes
-   */
-  getSuspiciousLoginCount(userId) {
-    const recentSessions = this.getRecentSessions(userId, 7 * 24 * 60 * 60 * 1000); // 7 jours
-    return recentSessions.filter(session => session.isSuspicious).length;
-  }
-
-  /**
-   * Calculer la distance entre deux coordonnées
-   * @param {Object} coord1 - Première coordonnée {lat, lng}
-   * @param {Object} coord2 - Deuxième coordonnée {lat, lng}
-   * @returns {number} Distance en kilomètres
-   */
-  calculateDistance(coord1, coord2) {
-    const R = 6371; // Rayon de la Terre en km
-    const dLat = this.toRadians(coord2.lat - coord1.lat);
-    const dLon = this.toRadians(coord2.lng - coord1.lng);
-    
-    const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-              Math.cos(this.toRadians(coord1.lat)) * Math.cos(this.toRadians(coord2.lat)) *
-              Math.sin(dLon / 2) * Math.sin(dLon / 2);
-    
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-    return R * c;
-  }
-
-  /**
-   * Convertir en radians
-   * @param {number} degrees - Degrés
-   * @returns {number} Radians
-   */
-  toRadians(degrees) {
-    return degrees * (Math.PI / 180);
-  }
-
-  /**
-   * Obtenir les statistiques de sécurité
-   * @returns {Object} Statistiques
-   */
-  getSecurityStats() {
-    let totalSessions = 0;
-    let suspiciousSessions = 0;
-    let totalDevices = 0;
-    
-    for (const sessions of this.activeSessions.values()) {
-      totalSessions += sessions.length;
-      suspiciousSessions += sessions.filter(s => s.isSuspicious).length;
-    }
-    
-    for (const devices of this.knownDevices.values()) {
-      totalDevices += devices.length;
-    }
+  getStats() {
+    if (!this.initialized) return {};
     
     return {
-      totalActiveSessions: totalSessions,
-      suspiciousSessions,
-      totalUsers: this.activeSessions.size,
-      totalKnownDevices: totalDevices,
-      averageSessionsPerUser: this.activeSessions.size > 0 ? totalSessions / this.activeSessions.size : 0
+      core: this.core.getStats(),
+      security: this.security.getSecurityStats(),
+      manager: {
+        totalSessions: this.core.getStats().totalSessions,
+        suspiciousSessions: this.getSuspiciousSessions().length
+      }
     };
   }
 
   /**
-   * Nettoyer les sessions expirées
+   * Obtenir la configuration
+   */
+  getConfig() {
+    if (!this.initialized) return {};
+    return {
+      core: this.core.getConfig(),
+      security: this.security.securityConfig
+    };
+  }
+
+  /**
+   * Mettre à jour la configuration
+   */
+  updateConfig(newConfig) {
+    if (!this.initialized) return;
+    
+    if (newConfig.core) {
+      this.core.updateConfig(newConfig.core);
+    }
+    
+    if (newConfig.security) {
+      this.security.securityConfig = { ...this.security.securityConfig, ...newConfig.security };
+    }
+    
+    logger.info('Configuration du service de sécurité des sessions mise à jour');
+  }
+
+  /**
+   * Nettoyer les anciennes données
    */
   cleanup() {
+    if (!this.initialized) return;
+    
+    this.core.cleanup();
+    this.security.cleanup();
+    
+    logger.info('Nettoyage du service de sécurité des sessions terminé');
+  }
+
+  /**
+   * Vérifier si une session est valide
+   */
+  isSessionValid(sessionId) {
+    if (!this.initialized) return false;
+    
+    const session = this.getUserSessions(sessionId);
+    return session && session.isActive && 
+           (Date.now() - session.lastActivity) < this.core.config.sessionTimeout;
+  }
+
+  /**
+   * Obtenir les sessions expirées
+   */
+  getExpiredSessions() {
+    if (!this.initialized) return [];
+    
     const now = Date.now();
-    let cleanedSessions = 0;
-    let cleanedDevices = 0;
+    const expiredSessions = [];
     
-    // Nettoyer les sessions expirées
-    for (const [userId, sessions] of this.activeSessions.entries()) {
-      const activeSessions = sessions.filter(session => 
-        now - session.lastActivity < this.config.sessionTimeout
+    for (const sessions of this.core.activeSessions.values()) {
+      const expired = sessions.filter(session => 
+        !session.isActive || 
+        (now - session.lastActivity) >= this.core.config.sessionTimeout
       );
-      
-      cleanedSessions += sessions.length - activeSessions.length;
-      
-      if (activeSessions.length === 0) {
-        this.activeSessions.delete(userId);
-      } else {
-        this.activeSessions.set(userId, activeSessions);
-      }
+      expiredSessions.push(...expired);
     }
     
-    // Nettoyer les appareils anciens
-    for (const [userId, devices] of this.knownDevices.entries()) {
-      const validDevices = devices.filter(device => 
-        now - device.lastSeen < this.config.deviceTrustDuration
+    return expiredSessions;
+  }
+
+  /**
+   * Obtenir les sessions à risque
+   */
+  getAtRiskSessions() {
+    if (!this.initialized) return [];
+    
+    const atRiskSessions = [];
+    
+    for (const sessions of this.core.activeSessions.values()) {
+      const atRisk = sessions.filter(session => 
+        session.isSuspicious || session.riskScore >= 30
       );
-      
-      cleanedDevices += devices.length - validDevices.length;
-      
-      if (validDevices.length === 0) {
-        this.knownDevices.delete(userId);
-      } else {
-        this.knownDevices.set(userId, validDevices);
-      }
+      atRiskSessions.push(...atRisk);
     }
     
-    if (cleanedSessions > 0 || cleanedDevices > 0) {
-      logger.info('Nettoyage sécurité sessions', {
-        cleanedSessions,
-        cleanedDevices
-      });
-    }
+    return atRiskSessions.sort((a, b) => b.riskScore - a.riskScore);
+  }
+
+  /**
+   * Calculer le score de risque d'un utilisateur
+   */
+  getUserRiskScore(userId) {
+    if (!this.initialized) return 0;
+    
+    const sessions = this.getUserSessions(userId);
+    if (sessions.length === 0) return 0;
+    
+    const riskScores = sessions.map(session => session.riskScore || 0);
+    const averageRisk = riskScores.reduce((sum, score) => sum + score, 0) / riskScores.length;
+    
+    // Ajouter le score de sécurité basé sur les tentatives de connexion
+    const failedLogins = this.security.getRecentFailedLogins(userId);
+    const rapidLogins = this.security.getRecentRapidLogins(userId);
+    const deviceRotations = this.security.getRecentDeviceRotations(userId);
+    
+    const securityScore = (failedLogins * 10) + (rapidLogins * 6) + (deviceRotations * 5);
+    
+    return Math.round((averageRisk * 0.7) + (securityScore * 0.3));
+  }
+
+  /**
+   * Obtenir le résumé de sécurité d'un utilisateur
+   */
+  getUserSecuritySummary(userId) {
+    if (!this.initialized) return null;
+    
+    const sessions = this.getUserSessions(userId);
+    const devices = this.getUserDevices(userId);
+    const riskScore = this.getUserRiskScore(userId);
+    const suspiciousSessions = sessions.filter(s => s.isSuspicious);
+    
+    return {
+      userId,
+      sessionCount: sessions.length,
+      deviceCount: devices.length,
+      riskScore,
+      suspiciousSessions: suspiciousSessions.length,
+      hasHighRisk: riskScore >= 50,
+      hasMediumRisk: riskScore >= 25,
+      lastActivity: sessions.length > 0 ? Math.max(...sessions.map(s => s.lastActivity)) : null,
+      trustedDevices: devices.filter(d => d.isTrusted).length,
+      alerts: suspiciousSessions.flatMap(s => s.alerts || [])
+    };
   }
 }
 
-// Instance singleton
-export const sessionSecurityService = new SessionSecurityService();
+// Singleton
+const sessionSecurityService = new SessionSecurityService();
+
+export { sessionSecurityService };
+export default sessionSecurityService;

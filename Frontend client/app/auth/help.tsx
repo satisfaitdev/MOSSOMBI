@@ -1,13 +1,13 @@
 import React from 'react';
 import { View, Linking } from 'react-native';
 import { MessageCircle, Phone, Mail, ChevronRight } from 'lucide-react-native';
-import HeaderWithBackButton from '@/components/HeaderWithBackButton';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { SPACING, BORDER_RADIUS, TYPOGRAPHY, SHADOWS } from '@/constants/colors';
 import { Heading, Body, Caption } from '@/components/atoms';
 import { Stack, Row } from '@/components/ui';
 import { PageContainer, ContentCard } from '@/components/layouts';
+import AuthPageLayout from '@/components/layouts/AuthPageLayout';
 
 export default function AuthHelpScreen() {
   const { colors } = useTheme();
@@ -50,9 +50,8 @@ export default function AuthHelpScreen() {
   ];
 
   return (
-    <>
-      <HeaderWithBackButton title={t('helpSupport' as any)} />
-      <PageContainer>
+    <AuthPageLayout title={t('helpSupport' as any)}>
+      <PageContainer style={{ backgroundColor: 'transparent' }}>
           <Stack spacing="xl">
             {/* Contact rapide */}
             <View>
@@ -120,6 +119,6 @@ export default function AuthHelpScreen() {
             </View>
           </Stack>
       </PageContainer>
-    </>
+    </AuthPageLayout>
   );
 }

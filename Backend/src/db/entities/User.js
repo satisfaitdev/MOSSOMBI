@@ -1,0 +1,37 @@
+import { EntitySchema } from 'typeorm';
+
+export const User = new EntitySchema({
+  name: 'User',
+  tableName: 'users',
+  columns: {
+    id: { type: 'uuid', primary: true },
+    email: { type: 'text', nullable: true },
+    phone: { type: 'text', nullable: true },
+    full_name: { type: 'text' },
+    user_id_display: { type: 'text', nullable: true },
+    country_code: { type: 'text', default: 'CG' },
+    points: { type: 'int', default: 0 },
+    user_level: { type: 'text', default: 'Bronze' },
+    role: { type: 'text', default: 'user' },
+    is_active: { type: 'boolean', default: true },
+    is_verified: { type: 'boolean', default: false },
+    phone_verified_at: { type: 'timestamptz', nullable: true },
+    password_hash: { type: 'text', nullable: true },
+    metadata: { type: 'jsonb', nullable: true },
+    preferences: { type: 'jsonb', nullable: true },
+    avatar_url: { type: 'text', nullable: true },
+    date_of_birth: { type: 'date', nullable: true },
+    address: { type: 'text', nullable: true },
+    kyc_status: { type: 'text', default: 'pending' },
+    last_login_at: { type: 'timestamptz', nullable: true },
+    totp_secret: { type: 'text', nullable: true },
+    is_super_admin: { type: 'boolean', default: false },
+    created_at: { type: 'timestamptz', createDate: true },
+    updated_at: { type: 'timestamptz', updateDate: true },
+  },
+  indices: [
+    { columns: ['email'], unique: true },
+    { columns: ['phone'], unique: true },
+    { columns: ['user_id_display'], unique: true },
+  ],
+});

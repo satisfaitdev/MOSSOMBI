@@ -63,13 +63,19 @@ class MonitoringService extends EventEmitter {
    */
   startMonitoring() {
     // Collecter les métriques toutes les minutes
-    setInterval(() => this.collectMetrics(), 60 * 1000);
+    const metricsInterval = setInterval(() => this.collectMetrics(), 60 * 1000);
     
     // Vérifier les seuils d'alerte toutes les 5 minutes
-    setInterval(() => this.checkAlertThresholds(), 5 * 60 * 1000);
+    const thresholdsInterval = setInterval(() => this.checkAlertThresholds(), 5 * 60 * 1000);
     
     // Nettoyer l'historique toutes les heures
-    setInterval(() => this.cleanupHistory(), 60 * 60 * 1000);
+    const cleanupInterval = setInterval(() => this.cleanupHistory(), 60 * 60 * 1000);
+
+    if (process.env.NODE_ENV === 'test') {
+      metricsInterval.unref();
+      thresholdsInterval.unref();
+      cleanupInterval.unref();
+    }
 
     logger.info('Service de monitoring démarré');
   }

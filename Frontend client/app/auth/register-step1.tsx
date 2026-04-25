@@ -3,25 +3,26 @@ import { KeyboardAvoidingView, Platform, Alert, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useLanguage } from '@/contexts/LanguageContext';
-import { SPACING, BORDER_RADIUS, TYPOGRAPHY } from '@/constants/colors';
-import { Heading, Caption } from '@/components/atoms';
+import { SPACING } from '@/constants/colors';
 import { Stack, Row } from '@/components/ui';
 import { PageContainer } from '@/components/layouts';
 import Button from '@/components/Button';
 import PhoneInput from '@/components/PhoneInput';
 import AuthLogo from '@/components/AuthLogo';
-import { Country } from '@/components/CountryPicker';
 import { useAuth } from '@/contexts/AuthContext';
+import { AdaptiveCard } from '@/components/ui/AdaptiveCard';
+import { AdaptiveText } from '@/components/ui/AdaptiveText';
+import AuthPageLayout from '@/components/layouts/AuthPageLayout';
 
 export default function RegisterStep1Screen() {
   const { colors } = useTheme();
   const { t } = useLanguage();
   const router = useRouter();
-  const { register, isLoading } = useAuth();
+  const { isLoading } = useAuth();
   
   const [phone, setPhone] = useState('');
-  const [selectedCountry, setSelectedCountry] = useState<Country | null>(null);
   const [phoneExists, setPhoneExists] = useState(false);
+  const [phoneIsVerified, setPhoneIsVerified] = useState<boolean | null>(null);
   const [phoneValid, setPhoneValid] = useState(false);
 
   const handleContinue = async () => {
@@ -36,8 +37,23 @@ export default function RegisterStep1Screen() {
       return;
     }
 
-    if (phoneExists) {
+    // Important: si is_verified est NULL/undefined (données legacy), on considère le compte comme déjà vérifié.
+    if (phoneExists && phoneIsVerified !== false) {
       Alert.alert('Erreur', 'Ce numéro de téléphone est déjà utilisé. Essayez de vous connecter.');
+      return;
+    }
+
+    if (phoneExists && phoneIsVerified === false) {
+      console.log('📱 Compte existant mais non vérifié, redirection vers vérification OTP:', phone);
+      router.push({
+        pathname: '/auth/register-step2',
+        params: {
+          phone,
+          otpSent: 'false',
+          accountCreated: 'true',
+          flow: 'verify_existing_unverified_user',
+        },
+      } as any);
       return;
     }
 
@@ -51,64 +67,78 @@ export default function RegisterStep1Screen() {
     } as any);
   };
 
-  const handlePhoneValidation = (isValid: boolean, exists: boolean) => {
+  const handlePhoneValidation = (isValid: boolean, exists: boolean, isVerified?: boolean | null) => {
     setPhoneValid(isValid);
     setPhoneExists(exists);
-  };
-
-  const handleCountryChange = (country: Country) => {
-    setSelectedCountry(country);
+    setPhoneIsVerified(isVerified ?? null);
   };
 
   return (
-    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
-      <PageContainer>
-        <Stack spacing="lg" style={{ alignItems: 'center', marginTop: SPACING.xl }}>
-          <AuthLogo size={120} />
-          <Stack spacing="xs" style={{ alignItems: 'center' }}>
-            <Heading level={1}>{t('registerTitle' as any)}</Heading>
-            <Caption style={{ textAlign: 'center' }}>{t('step1Title' as any)}</Caption>
+    <AuthPageLayout title={t('registerTitle' as any)}>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={{ flex: 1, backgroundColor: 'transparent' }}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
+      >
+        <PageContainer style={{ backgroundColor: 'transparent' }}>
+          <Stack spacing="md" style={{ alignItems: 'center', marginTop: SPACING.lg }}>
+            <AuthLogo size={96} />
+            <Stack spacing="xs" style={{ alignItems: 'center' }}>
+              <AdaptiveText variant="display" weight="bold" style={{ textAlign: 'center' }}>
+                {t('registerTitle' as any)}
+              </AdaptiveText>
+              <AdaptiveText variant="caption" weight="regular" style={{ textAlign: 'center' }}>
+                {t('step1Title' as any)}
+              </AdaptiveText>
+            </Stack>
           </Stack>
-        </Stack>
 
-        <Stack spacing="md" style={{ marginTop: SPACING.xl }}>
-          <PhoneInput
-            label={t('whatsappNumber' as any)}
-            value={phone}
-            onChangeText={setPhone}
-            onCountryChange={handleCountryChange}
-            onPhoneValidation={handlePhoneValidation}
-            countrySelectable={false}
-          />
-          <Caption>
-            {t('whatsappNumber' as any) === 'WhatsApp Number' ? 
-              'We will send you a verification code via SMS' : 
-              'Nous vous enverrons un code de vérification par SMS'
-            }
-          </Caption>
-          <Button 
-            title={t('next' as any)} 
-            onPress={handleContinue} 
-            variant="gradient" 
-            loading={isLoading} 
-            disabled={!phone || phone.length < 10 || !phoneValid || phoneExists} 
-            fullWidth 
-          />
+          <AdaptiveCard
+            margin={0}
+            padding={Platform.select({ ios: 18, android: 16 })}
+            variant="elevated"
+            style={{ width: '100%', marginTop: SPACING.lg }}
+          >
+            <Stack spacing="md">
+              <PhoneInput
+                label={t('whatsappNumber' as any)}
+                value={phone}
+                onChangeText={setPhone}
+                onPhoneValidation={handlePhoneValidation}
+                countrySelectable={false}
+              />
+              <AdaptiveText variant="caption" weight="regular" color={colors.textSecondary}>
+                {t('whatsappNumber' as any) === 'WhatsApp Number'
+                  ? 'We will send you a verification code via SMS'
+                  : 'Nous vous enverrons un code de vérification par SMS'}
+              </AdaptiveText>
+              <Button
+                title={t('next' as any)}
+                onPress={handleContinue}
+                variant="gradient"
+                loading={isLoading}
+                disabled={!phone || phone.length < 10 || !phoneValid || phoneExists}
+                fullWidth
+              />
+            </Stack>
+          </AdaptiveCard>
 
-          <Row align="center" style={{ marginVertical: SPACING.md }}>
+          <Row align="center" style={{ marginTop: SPACING.md, marginBottom: SPACING.sm }}>
             <View style={{ flex: 1, height: 1, backgroundColor: colors.border }} />
-            <Caption style={{ marginHorizontal: SPACING.sm }}>{t('or' as any)}</Caption>
+            <AdaptiveText variant="caption" weight="regular" style={{ marginHorizontal: SPACING.sm }}>
+              {t('or' as any)}
+            </AdaptiveText>
             <View style={{ flex: 1, height: 1, backgroundColor: colors.border }} />
           </Row>
 
-          <Button 
-            title={t('alreadyHaveAccount' as any)} 
-            onPress={() => router.back()} 
-            variant="outline" 
-            fullWidth 
+          <Button
+            title={t('alreadyHaveAccount' as any)}
+            onPress={() => router.back()}
+            variant="secondary"
+            fullWidth
           />
-        </Stack>
-      </PageContainer>
-    </KeyboardAvoidingView>
+        </PageContainer>
+      </KeyboardAvoidingView>
+    </AuthPageLayout>
   );
 }

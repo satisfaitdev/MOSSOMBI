@@ -13,6 +13,7 @@ import { useSuccessModal } from '@/hooks';
 import { SuccessModal } from '@/components/organisms/modals';
 import Button from '@/components/Button';
 import Input from '@/components/Input';
+import GradientBackground from '@/components/atoms/GradientBackground';
 
 const TRUCK_SIZES = [
   { id: 'small', name: 'Petit camion', subtitle: 'Studio / 1 pièce', priceBase: 50000, icon: '🚚' },
@@ -84,9 +85,9 @@ export default function MovingScreen() {
   const estimatedTotal = (selectedTruck?.priceBase || 0) + addonsTotal;
 
   return (
-    <>
+    <GradientBackground style={{ flex: 1 }} opacity="10">
       <HeaderWithBackButton title="Déménagement" />
-      <PageContainer>
+      <PageContainer style={{ backgroundColor: 'transparent' }}>
         <Stack spacing="lg">
           <Stepper steps={steps} currentStep={currentStep} showProgressBar />
 
@@ -175,6 +176,6 @@ export default function MovingScreen() {
       </View>
 
       <SuccessModal {...successModal.props} />
-    </>
+    </GradientBackground>
   );
 }

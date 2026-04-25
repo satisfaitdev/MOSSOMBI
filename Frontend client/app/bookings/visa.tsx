@@ -1,18 +1,14 @@
 import React, { useState } from 'react';
-import { View, Pressable } from 'react-native';
-import { Plane, FileText, Calendar, DollarSign, CheckCircle } from 'lucide-react-native';
-import { useRouter } from 'expo-router';
+import { View } from 'react-native';
+import { FileText, Calendar } from 'lucide-react-native';
 import HeaderWithBackButton from '@/components/HeaderWithBackButton';
-import { useTheme } from '@/contexts/ThemeContext';
-import { SPACING, BORDER_RADIUS, TYPOGRAPHY, SHADOWS } from '@/constants/colors';
-import { Heading, Body, Caption } from '@/components/atoms';
-import { Section, Stack, Row } from '@/components/ui';
+import { Heading, Body } from '@/components/atoms';
+import { Stack } from '@/components/ui';
 import { PageContainer } from '@/components/layouts';
 import { useSuccessModal } from '@/hooks';
 import { SuccessModal } from '@/components/organisms/modals';
-import Button from '@/components/Button';
-import Input from '@/components/Input';
 import { BookingModal, BookingResultCard } from '@/components/organisms';
+import GradientBackground from '@/components/atoms/GradientBackground';
 
 interface VisaType {
   id: string;
@@ -32,7 +28,6 @@ const VISA_TYPES: VisaType[] = [
 ];
 
 export default function VisaApplicationScreen() {
-  const { colors } = useTheme();
   const [selectedVisa, setSelectedVisa] = useState<VisaType | null>(null);
   const [showApplicationModal, setShowApplicationModal] = useState(false);
   const successModal = useSuccessModal({ autoClose: true, navigateBack: true });
@@ -51,9 +46,9 @@ export default function VisaApplicationScreen() {
   };
 
   return (
-    <>
+    <GradientBackground style={{ flex: 1 }} opacity="10">
       <HeaderWithBackButton title="Demande de Visa" />
-      <PageContainer>
+      <PageContainer style={{ backgroundColor: 'transparent' }}>
         <Stack spacing="lg">
           <View>
             <Heading level={2}>Types de visa disponibles</Heading>
@@ -106,6 +101,6 @@ export default function VisaApplicationScreen() {
       </PageContainer>
 
       <SuccessModal {...successModal.props} />
-    </>
+    </GradientBackground>
   );
 }

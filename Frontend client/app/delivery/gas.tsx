@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { View, Pressable } from 'react-native';
 import { MapPin, Phone, Fuel, User } from 'lucide-react-native';
-import { useRouter } from 'expo-router';
 import { useTheme } from '@/contexts/ThemeContext';
 import { SPACING, TYPOGRAPHY } from '@/constants/colors';
 import { Heading, Body, Caption } from '@/components/atoms';
@@ -13,6 +12,7 @@ import { useSuccessModal } from '@/hooks';
 import { SuccessModal } from '@/components/organisms/modals';
 import Button from '@/components/Button';
 import Input from '@/components/Input';
+import GradientBackground from '@/components/atoms/GradientBackground';
 
 const GAS_SIZES = [
   { id: '6kg', name: 'Bouteille 6kg', price: 12000 },
@@ -30,7 +30,6 @@ const steps = [
 
 export default function GasScreen() {
   const { colors } = useTheme();
-  const router = useRouter();
   const [currentStep, setCurrentStep] = useState(0);
   const [gasSize, setGasSize] = useState('');
   const [address, setAddress] = useState('');
@@ -68,9 +67,9 @@ export default function GasScreen() {
   const selected = GAS_SIZES.find(g => g.id === gasSize);
 
   return (
-    <>
+    <GradientBackground style={{ flex: 1 }} opacity="10">
       <HeaderWithBackButton title="Livraison de gaz" />
-      <PageContainer scrollable={false}>
+      <PageContainer scrollable={false} style={{ backgroundColor: 'transparent' }}>
         <View style={{ flex: 1, paddingBottom: 100 }}>
           <Stack spacing="lg">
             <Stepper steps={steps} currentStep={currentStep} showProgressBar />
@@ -139,6 +138,6 @@ export default function GasScreen() {
         </View>
       </PageContainer>
       <SuccessModal {...successModal.props} />
-    </>
+    </GradientBackground>
   );
 }
