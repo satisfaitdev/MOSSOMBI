@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import {
   Plus,
   Search,
@@ -12,10 +13,7 @@ import {
   Eye,
   Building2,
   ShieldCheck,
-  FileText,
-  LayoutGrid,
   ChevronRight,
-  ExternalLink,
   Ban
 } from 'lucide-react';
 
@@ -36,16 +34,16 @@ type Agency = {
 
 function normalizeAgency(raw: any): Agency {
   return {
-    id: String(raw?.id ?? raw?.t_id ?? ''),
-    name: String(raw?.name ?? raw?.t_name ?? ''),
-    city: String(raw?.city ?? raw?.t_city ?? ''),
-    address: String(raw?.address ?? raw?.t_address ?? ''),
-    logo_url: String(raw?.logo_url ?? raw?.t_logo_url ?? ''),
-    owner_user_id: raw?.owner_user_id ?? raw?.t_owner_user_id ?? null,
-    status: (raw?.status ?? raw?.t_status ?? 'pending') as AgencyStatus,
-    is_active: Boolean(raw?.is_active ?? raw?.t_is_active ?? false),
-    created_at: String(raw?.created_at ?? raw?.t_created_at ?? ''),
-    updated_at: String(raw?.updated_at ?? raw?.t_updated_at ?? ''),
+    id: String(raw?.id ?? ''),
+    name: String(raw?.name ?? ''),
+    city: String(raw?.city ?? ''),
+    address: String(raw?.address ?? ''),
+    logo_url: String(raw?.logo_url ?? ''),
+    owner_user_id: raw?.owner_user_id ?? null,
+    status: (raw?.status ?? 'pending') as AgencyStatus,
+    is_active: Boolean(raw?.is_active ?? false),
+    created_at: String(raw?.created_at ?? ''),
+    updated_at: String(raw?.updated_at ?? ''),
   };
 }
 
@@ -79,15 +77,10 @@ function Badge({ status }: { status: AgencyStatus }) {
 }
 
 export default function AgenciesClient() {
+  const router = useRouter();
   const [items, setItems] = useState<Agency[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  const [detailsOpen, setDetailsOpen] = useState(false);
-  const [detailsAgency, setDetailsAgency] = useState<Agency | null>(null);
-  const [detailsLoading, setDetailsLoading] = useState(false);
-  const [detailsServices, setDetailsServices] = useState<any[]>([]);
-  const [detailsDocuments, setDetailsDocuments] = useState<any[]>([]);
 
   const [q, setQ] = useState('');
   const [status, setStatus] = useState<AgencyStatus | 'all'>('all');
@@ -126,7 +119,6 @@ export default function AgenciesClient() {
       const json = await res.json().catch(() => null);
       if (!res.ok || !json?.success) throw new Error(json?.error || 'Action échouée');
       await refresh();
-      if (detailsAgency?.id === id) setDetailsOpen(false);
     } catch (e: any) {
       setError(e?.message || 'Action échouée');
     }
@@ -141,75 +133,9 @@ export default function AgenciesClient() {
       const json = await res.json().catch(() => null);
       if (!res.ok || !json?.success) throw new Error(json?.error || 'Action échouée');
       await refresh();
-      if (detailsAgency?.id === id) setDetailsOpen(false);
     } catch (e: any) {
       setError(e?.message || 'Action échouée');
     }
-  }
-
-  async function refreshDetails(agencyId: string) {
-    if (!agencyId) return;
-    setDetailsLoading(true);
-    try {
-      const [srRes, docRes] = await Promise.all([
-        fetch(`/api/platform/agencies/${encodeURIComponent(agencyId)}/service-requests`, { cache: 'no-store' }),
-        fetch(`/api/platform/agencies/${encodeURIComponent(agencyId)}/documents`, { cache: 'no-store' }),
-      ]);
-
-      const srJson = await srRes.json().catch(() => null);
-      const docJson = await docRes.json().catch(() => null);
-
-      if (srRes.ok && srJson?.success) setDetailsServices(Array.isArray(srJson.data) ? srJson.data : []);
-      if (docRes.ok && docJson?.success) setDetailsDocuments(Array.isArray(docJson.data) ? docJson.data : []);
-    } catch {
-      // ignore
-    } finally {
-      setDetailsLoading(false);
-    }
-  }
-
-  async function approveServiceRequest(serviceRequestId: string) {
-    if (!serviceRequestId) return;
-    if (!confirm('Approuver ce service ?')) return;
-    setError(null);
-    try {
-      const res = await fetch(`/api/platform/service-requests/${encodeURIComponent(serviceRequestId)}/approve`, {
-        method: 'POST',
-      });
-      const json = await res.json().catch(() => null);
-      if (!res.ok || !json?.success) throw new Error(json?.error || 'Action échouée');
-      if (detailsAgency?.id) await refreshDetails(detailsAgency.id);
-    } catch (e: any) {
-      setError(e?.message || 'Action échouée');
-    }
-  }
-
-  async function rejectServiceRequest(serviceRequestId: string) {
-    if (!serviceRequestId) return;
-    const admin_notes = prompt('Motif / note admin (optionnel)') || '';
-    if (!confirm('Rejeter ce service ?')) return;
-    setError(null);
-    try {
-      const res = await fetch(`/api/platform/service-requests/${encodeURIComponent(serviceRequestId)}/reject`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ admin_notes }),
-      });
-      const json = await res.json().catch(() => null);
-      if (!res.ok || !json?.success) throw new Error(json?.error || 'Action échouée');
-      if (detailsAgency?.id) await refreshDetails(detailsAgency.id);
-    } catch (e: any) {
-      setError(e?.message || 'Action échouée');
-    }
-  }
-
-  async function openDetails(a: Agency) {
-    if (!a?.id) return;
-    setDetailsAgency(a);
-    setDetailsOpen(true);
-    setDetailsServices([]);
-    setDetailsDocuments([]);
-    await refreshDetails(a.id);
   }
 
   async function createManualAgency() {
@@ -235,9 +161,11 @@ export default function AgenciesClient() {
     return items.filter((x) => x.status === status);
   }, [items, status]);
 
+  const pendingCount = items.filter(x => x.status === 'pending').length;
+
   return (
     <div className="space-y-8 animate-in fade-in duration-500">
-      {/* Header Section */}
+      {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
         <div>
           <h1 className="text-3xl font-bold tracking-tight text-white flex items-center gap-3">
@@ -245,7 +173,7 @@ export default function AgenciesClient() {
             Agences
           </h1>
           <p className="text-sm text-zinc-500 mt-2 max-w-lg">
-            Gérez et validez les demandes d’activation des agences partenaires sur la plateforme Mossombi.
+            Gérez et validez les demandes d'activation des agences partenaires sur la plateforme Mossombi.
           </p>
         </div>
 
@@ -255,6 +183,7 @@ export default function AgenciesClient() {
             <input
               value={q}
               onChange={(e) => setQ(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && refresh()}
               placeholder="Rechercher une agence..."
               className="bg-zinc-900/40 border border-zinc-800/60 rounded-xl pl-11 pr-4 py-2.5 text-sm text-zinc-200 outline-none focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/20 transition-all w-full md:w-64"
             />
@@ -277,7 +206,7 @@ export default function AgenciesClient() {
       </div>
 
       {/* Filter Tabs */}
-      <div className="flex p-1 bg-zinc-900/40 border border-zinc-800/60 rounded-xl self-start">
+      <div className="flex p-1 bg-zinc-900/40 border border-zinc-800/60 rounded-xl self-start flex-wrap">
         {(['all', 'pending', 'approved', 'rejected'] as const).map((t) => (
           <button
             key={t}
@@ -287,7 +216,7 @@ export default function AgenciesClient() {
                 : 'text-zinc-500 hover:text-zinc-300'
               }`}
           >
-            {t === 'all' ? 'Toutes' : t === 'pending' ? 'En attente' : t === 'approved' ? 'Approuvées' : 'Rejetées'}
+            {t === 'all' ? 'Toutes' : t === 'pending' ? `En attente${pendingCount > 0 ? ` (${pendingCount})` : ''}` : t === 'approved' ? 'Approuvées' : 'Rejetées'}
           </button>
         ))}
       </div>
@@ -312,7 +241,7 @@ export default function AgenciesClient() {
             <Ban size={32} />
           </div>
           <h3 className="text-lg font-medium text-zinc-400">Aucune agence trouvée</h3>
-          <p className="text-sm text-zinc-650 mt-1">Ajustez vos filtres ou effectuez une nouvelle recherche.</p>
+          <p className="text-sm text-zinc-600 mt-1">Ajustez vos filtres ou effectuez une nouvelle recherche.</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -351,7 +280,7 @@ export default function AgenciesClient() {
 
               <div className="px-6 py-4 bg-white/5 border-t border-zinc-800/50 flex items-center justify-between">
                 <button
-                  onClick={() => openDetails(a)}
+                  onClick={() => router.push(`/platform/agencies/${a.id}`)}
                   className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-zinc-400 hover:text-white transition-colors"
                 >
                   Détails
@@ -379,7 +308,7 @@ export default function AgenciesClient() {
                   )}
                   {a.status !== 'pending' && (
                     <button
-                      onClick={() => openDetails(a)}
+                      onClick={() => router.push(`/platform/agencies/${a.id}`)}
                       className="p-2 rounded-lg bg-zinc-800 text-zinc-400 hover:text-white transition-all"
                     >
                       <Eye size={18} />
@@ -389,187 +318,6 @@ export default function AgenciesClient() {
               </div>
             </div>
           ))}
-        </div>
-      )}
-
-      {/* Details Modal */}
-      {detailsOpen && detailsAgency && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in zoom-in-95 duration-200">
-          <div className="w-full max-w-4xl max-h-[90vh] flex flex-col rounded-3xl border border-zinc-800/60 bg-zinc-950 shadow-[0_0_50px_-12px_rgba(0,0,0,0.5)] overflow-hidden">
-            {/* Modal Header */}
-            <div className="p-6 border-b border-zinc-800/60 flex items-center justify-between gap-6 bg-zinc-900/20">
-              <div className="flex items-center gap-5">
-                {detailsAgency.logo_url ? (
-                  <img src={detailsAgency.logo_url} alt={detailsAgency.name} className="w-14 h-14 rounded-2xl object-cover border border-zinc-800" />
-                ) : (
-                  <div className="w-14 h-14 rounded-2xl bg-zinc-900 border border-zinc-800 flex items-center justify-center text-zinc-700">
-                    <Building2 size={24} />
-                  </div>
-                )}
-                <div>
-                  <div className="flex items-center gap-3">
-                    <h3 className="text-xl font-bold text-white leading-tight">{detailsAgency.name}</h3>
-                    <Badge status={detailsAgency.status} />
-                  </div>
-                  <div className="flex items-center gap-2 text-zinc-500 text-xs mt-1">
-                    <MapPin size={12} />
-                    <span>{detailsAgency.city || '—'} • {detailsAgency.address || '—'}</span>
-                  </div>
-                </div>
-              </div>
-              <button
-                onClick={() => {
-                  setDetailsOpen(false);
-                  setDetailsAgency(null);
-                }}
-                className="p-2.5 rounded-xl bg-zinc-900 text-zinc-400 hover:text-white border border-zinc-800 hover:bg-zinc-800 transition-all"
-              >
-                <XCircle size={22} />
-              </button>
-            </div>
-
-            {/* Modal Content Scrollable */}
-            <div className="flex-1 overflow-y-auto p-8 space-y-10">
-              {/* Section: Services */}
-              <div className="space-y-4">
-                <h4 className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.2em] text-zinc-500">
-                  <LayoutGrid size={14} className="text-blue-500" />
-                  Services demandés
-                </h4>
-                {detailsLoading ? (
-                  <div className="h-20 animate-pulse bg-zinc-900/50 rounded-2xl" />
-                ) : detailsServices.length === 0 ? (
-                  <div className="p-6 rounded-2xl border border-dashed border-zinc-800/60 text-center">
-                    <p className="text-sm text-zinc-600 italic">Aucun service spécifique demandé.</p>
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    {detailsServices.map((s) => (
-                      <div key={String(s?.id)} className="group p-4 rounded-2xl border border-zinc-800/60 bg-zinc-900/10 hover:border-zinc-700 transition-all">
-                        <div className="flex items-center justify-between mb-3">
-                          <p className="text-sm text-zinc-100 font-bold">{String(s?.service_id || 'Service')}</p>
-                          <span className={`text-[10px] font-bold uppercase py-0.5 px-2 rounded-full border ${s?.status === 'approved' ? 'text-emerald-400 border-emerald-400/20 bg-emerald-400/5' : 'text-amber-400 border-amber-400/20 bg-amber-400/5'
-                            }`}>
-                            {String(s?.status || 'pending')}
-                          </span>
-                        </div>
-                        {s?.admin_notes ? (
-                          <div className="text-[11px] text-zinc-500 mb-3">
-                            {String(s.admin_notes)}
-                          </div>
-                        ) : null}
-                        {String(s?.status || 'pending') === 'pending' && (
-                          <div className="flex items-center justify-end gap-2 mb-3">
-                            <button
-                              onClick={() => rejectServiceRequest(String(s?.id || ''))}
-                              className="p-2 rounded-lg border border-zinc-800 text-zinc-400 hover:text-rose-400 hover:border-rose-500/30 hover:bg-rose-500/10 transition-all"
-                              title="Rejeter"
-                            >
-                              <XCircle size={18} />
-                            </button>
-                            <button
-                              onClick={() => approveServiceRequest(String(s?.id || ''))}
-                              className="p-2 rounded-lg bg-emerald-500 text-white hover:bg-emerald-400 transition-all shadow-lg shadow-emerald-500/20"
-                              title="Approuver"
-                            >
-                              <CheckCircle2 size={18} />
-                            </button>
-                          </div>
-                        )}
-                        {s?.payload_json && Object.keys(s.payload_json).length > 0 && (
-                          <div className="pt-3 border-t border-zinc-900">
-                            <pre className="text-[10px] leading-relaxed text-zinc-500 font-mono whitespace-pre-wrap">
-                              {JSON.stringify(s.payload_json, null, 2)}
-                            </pre>
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              {/* Section: Documents */}
-              <div className="space-y-4">
-                <h4 className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.2em] text-zinc-500">
-                  <FileText size={14} className="text-blue-500" />
-                  Justificatifs fournis
-                </h4>
-                {detailsLoading ? (
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="h-32 animate-pulse bg-zinc-900/50 rounded-2xl" />
-                    <div className="h-32 animate-pulse bg-zinc-900/50 rounded-2xl" />
-                  </div>
-                ) : detailsDocuments.length === 0 ? (
-                  <div className="p-6 rounded-2xl border border-dashed border-zinc-800/60 text-center text-zinc-600">
-                    <p className="text-sm italic">Aucun document n'a été soumis.</p>
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-                    {detailsDocuments.map((d) => (
-                      <div key={String(d?.id)} className="group rounded-2xl border border-zinc-800/60 bg-zinc-900/10 overflow-hidden hover:border-zinc-700 transition-all">
-                        <div className="p-4 border-b border-zinc-900/80 bg-zinc-900/20 flex items-center justify-between">
-                          <div>
-                            <p className="text-sm text-zinc-200 font-bold capitalize">{String(d?.doc_type || 'document').replace(/_/g, ' ')}</p>
-                            <p className="text-[10px] text-zinc-500 font-medium">Service: {String(d?.service_id || 'Global')}</p>
-                          </div>
-                          <span className={`text-[10px] font-bold uppercase py-0.5 px-2 rounded-full border ${d?.status === 'approved' ? 'text-emerald-400 border-emerald-400/20 bg-emerald-400/5' : 'text-amber-400 border-amber-400/20 bg-amber-400/5'
-                            }`}>
-                            {String(d?.status || 'pending')}
-                          </span>
-                        </div>
-                        <div className="relative aspect-video bg-zinc-900">
-                          {String(d?.file_url || '').startsWith('data:image') || String(d?.file_url || '').match(/\.(jpg|jpeg|png|gif|webp)$/i) ? (
-                            <img
-                              src={String(d.file_url)}
-                              alt={String(d?.doc_type)}
-                              className="w-full h-full object-cover transition-transform group-hover:scale-105 duration-500"
-                            />
-                          ) : (
-                            <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-zinc-600">
-                              <FileText size={32} />
-                              <p className="text-xs font-medium">Document Fichier</p>
-                            </div>
-                          )}
-                          <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center backdrop-blur-[2px]">
-                            <a
-                              href={String(d.file_url)}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="bg-white text-black px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider flex items-center gap-2"
-                            >
-                              <ExternalLink size={14} />
-                              Voir
-                            </a>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Modal Footer Actions */}
-            {detailsAgency.status === 'pending' && (
-              <div className="p-6 border-t border-zinc-800/60 bg-zinc-900/40 flex items-center justify-end gap-3">
-                <button
-                  onClick={() => reject(detailsAgency.id)}
-                  className="flex items-center gap-2 px-6 py-2.5 rounded-xl border border-zinc-800 text-zinc-400 hover:text-rose-400 hover:border-rose-500/30 hover:bg-rose-500/10 font-bold text-xs uppercase tracking-wider transition-all"
-                >
-                  <XCircle size={18} />
-                  Rejeter
-                </button>
-                <button
-                  onClick={() => approve(detailsAgency.id)}
-                  className="flex items-center gap-2 px-8 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-white font-bold text-xs uppercase tracking-wider transition-all shadow-lg shadow-emerald-500/10"
-                >
-                  <CheckCircle2 size={18} />
-                  Approuver l'agence
-                </button>
-              </div>
-            )}
-          </div>
         </div>
       )}
     </div>

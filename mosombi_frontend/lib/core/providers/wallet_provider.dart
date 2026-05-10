@@ -131,13 +131,12 @@ class WalletProvider extends ChangeNotifier {
       final response = await _apiClient.dio.get(ApiConfig.getWallet);
       if (response.statusCode == 200 && response.data['success']) {
         final data = response.data['data'];
-        
-        final num bal = data['wallet']?['balance'] ?? data['points'] ?? 0;
-        _balance = bal.toDouble();
+        final double bal = double.tryParse(data['wallet']?['balance']?.toString() ?? data['points']?.toString() ?? '0') ?? 0.0;
+        _balance = bal;
         
         // Simuler un fetch du savings si non supporté nativement
-        final num savBal = data['wallet']?['savings_balance'] ?? 0;
-        _savingsBalance = savBal.toDouble();
+        final double savBal = double.tryParse(data['wallet']?['savings_balance']?.toString() ?? '0') ?? 0.0;
+        _savingsBalance = savBal;
 
         // Récupérer les transactions
         final txs = data['recent_transactions'] as List<dynamic>? ?? [];

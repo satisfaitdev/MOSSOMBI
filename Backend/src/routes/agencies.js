@@ -638,6 +638,20 @@ const createProductSchema = Joi.object({
   country: Joi.string().allow('').max(64).optional(),
   delivery_time: Joi.string().allow('').max(64).optional(),
   image_url: Joi.string().allow('').max(2000000).optional(),
+  shipping_unit: Joi.string().valid('kg', 'cbm').default('kg').optional(),
+  shipping_value: Joi.number().min(0).default(0).optional(),
+  
+  // Nouveaux champs pour métadonnées
+  category: Joi.string().allow('', null).optional(),
+  brand: Joi.string().allow('', null).optional(),
+  gallery_urls: Joi.array().items(Joi.string().allow('', null)).allow(null).optional(),
+  video_url: Joi.string().allow('', null).optional(),
+  specifications: Joi.object().allow(null).optional(),
+  variants: Joi.array().items(Joi.object()).allow(null).optional(),
+  stock_quantity: Joi.number().integer().min(0).optional(),
+  currency: Joi.string().default('XAF').optional(),
+  featured: Joi.boolean().optional(),
+  promotion: Joi.object().allow(null).optional(),
 }).unknown(true);
 
 // POST /api/v1/agencies/my/products
@@ -652,41 +666,57 @@ router.post('/my/products', asyncHandler(async (req, res) => {
 
   const now = new Date().toISOString();
   
-  // Safe storage of metadata
+  // Store all extra data in the metadata JSONB column
   const metadata = {
-    category: value.category || 'Marketplace',
-    gallery_urls: value.gallery_urls || [],
-    specifications: value.specifications || {},
-    variants: value.variants || [],
-    stock_quantity: value.stock_quantity || 1
+    currency: value.currency || 'XAF',
+    media: {
+      images: value.gallery_urls || [],
+      video: value.video_url || null,
+    },
+    category: {
+      id: (value.category || 'marketplace').toLowerCase().replace(/\s+/g, '_'),
+      name: value.category || 'Marketplace',
+      brand: value.brand || '',
+    },
+    attributes: {
+      specifications: value.specifications || {},
+      variants: value.variants || [],
+    },
+    stock_management: {
+      track_quantity: true,
+      quantity: value.stock_quantity || 1,
+    },
+    delivery: {
+      shipping_unit: value.shipping_unit || 'kg',
+      shipping_value: value.shipping_value || 0,
+    },
+    marketing: {
+      featured: value.featured || false,
+      promotion: value.promotion || { active: false },
+    },
+    filters: {
+      main_category: [value.category || 'Marketplace'],
+      brand: value.brand ? [value.brand] : [],
+      gender: value.specifications?.Genre ? [value.specifications.Genre] : [],
+      age_group: value.specifications?.['Public cible'] ? [value.specifications['Public cible']] : [],
+      in_stock: value.in_stock,
+      has_promotion: !!(value.promotion?.active)
+    }
   };
-  
-  // Injectons les métadonnées dans la description de base si la colonne metadata n'existe pas yet
-  let finalDescription = value.description || '';
-  if (metadata.variants.length > 0) {
-    const variantsText = metadata.variants.map(v => {
-      const colorsStr = (v.colors && v.colors.length > 0) ? ` [Couleurs: ${v.colors.join('|')}]` : '';
-      return `${v.title}${colorsStr} (Stock: ${v.stock})`;
-    }).join(', ');
-    finalDescription += `\n\n[Déclinaisons] : ${variantsText}`;
-  }
-  if (Object.keys(metadata.specifications).length > 0) {
-    finalDescription += `\n\n[Spécifications] : ${JSON.stringify(metadata.specifications)}`;
-  }
-  if (metadata.gallery_urls && metadata.gallery_urls.length > 0) {
-    finalDescription += `\n\n[Galerie] : ${metadata.gallery_urls.join(',')}`;
-  }
   
   const row = {
     id: crypto.randomUUID(),
     agency_id: ctx.agency.id,
     name: value.name,
-    description: finalDescription.trim(),
+    description: (value.description || '').trim(),
     price: value.price,
     in_stock: value.in_stock,
     country: value.origin || value.country || 'CG',
     delivery_time: value.delivery_time || '2-3 Jours',
     image_url: value.image_url || '',
+    shipping_unit: value.shipping_unit || 'kg',
+    shipping_value: value.shipping_value || 0,
+    metadata,
     status: 'active',
     created_by_user_id: req.user.id,
     created_at: now,
@@ -719,42 +749,58 @@ router.put('/my/products/:id', asyncHandler(async (req, res) => {
 
   const now = new Date().toISOString();
   
-  // Safe storage of metadata
+  // Store all extra data in the metadata JSONB column
   const metadata = {
-    category: value.category || 'Marketplace',
-    gallery_urls: value.gallery_urls || [],
-    specifications: value.specifications || {},
-    variants: value.variants || [],
-    stock_quantity: value.stock_quantity || 1
+    currency: value.currency || 'XAF',
+    media: {
+      images: value.gallery_urls || [],
+      video: value.video_url || null,
+    },
+    category: {
+      id: (value.category || 'marketplace').toLowerCase().replace(/\s+/g, '_'),
+      name: value.category || 'Marketplace',
+      brand: value.brand || '',
+    },
+    attributes: {
+      specifications: value.specifications || {},
+      variants: value.variants || [],
+    },
+    stock_management: {
+      track_quantity: true,
+      quantity: value.stock_quantity || 1,
+    },
+    delivery: {
+      shipping_unit: value.shipping_unit || 'kg',
+      shipping_value: value.shipping_value || 0,
+    },
+    marketing: {
+      featured: value.featured || false,
+      promotion: value.promotion || { active: false },
+    },
+    filters: {
+      main_category: [value.category || 'Marketplace'],
+      brand: value.brand ? [value.brand] : [],
+      gender: value.specifications?.Genre ? [value.specifications.Genre] : [],
+      age_group: value.specifications?.['Public cible'] ? [value.specifications['Public cible']] : [],
+      in_stock: value.in_stock,
+      has_promotion: !!(value.promotion?.active)
+    }
   };
-  
-  // Injectons les métadonnées dans la description de base si la colonne metadata n'existe pas yet
-  let finalDescription = value.description || '';
-  if (metadata.variants.length > 0) {
-    const variantsText = metadata.variants.map(v => {
-      const colorsStr = (v.colors && v.colors.length > 0) ? ` [Couleurs: ${v.colors.join('|')}]` : '';
-      return `${v.title}${colorsStr} (Stock: ${v.stock})`;
-    }).join(', ');
-    finalDescription += `\n\n[Déclinaisons] : ${variantsText}`;
-  }
-  if (Object.keys(metadata.specifications).length > 0) {
-    finalDescription += `\n\n[Spécifications] : ${JSON.stringify(metadata.specifications)}`;
-  }
-  if (metadata.gallery_urls && metadata.gallery_urls.length > 0) {
-    finalDescription += `\n\n[Galerie] : ${metadata.gallery_urls.join(',')}`;
-  }
   
   const updates = {
     name: value.name,
-    description: finalDescription.trim(),
+    description: (value.description || '').trim(),
     price: value.price,
     in_stock: value.in_stock,
     country: value.origin || value.country || 'CG',
     delivery_time: value.delivery_time || '2-3 Jours',
+    shipping_unit: value.shipping_unit || 'kg',
+    shipping_value: value.shipping_value || 0,
+    metadata,
     updated_at: now,
   };
   
-  // N'updater l'image que si elle a été fournie (et pas vide si on la garde telle quelle)
+  // N'updater l'image que si elle a été fournie
   if (value.image_url && value.image_url !== '') {
       updates.image_url = value.image_url;
   }

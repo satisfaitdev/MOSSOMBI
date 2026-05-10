@@ -106,7 +106,7 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
                   ),
                   const SizedBox(height: 16),
                   SizedBox(
-                    height: 260,
+                    height: 280,
                     child: ListView.builder(
                       scrollDirection: Axis.horizontal,
                       physics: const BouncingScrollPhysics(),
@@ -140,7 +140,7 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
               sliver: SliverGrid(
                 gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                   crossAxisCount: 2,
-                  childAspectRatio: 0.65,
+                  childAspectRatio: 0.58,
                   mainAxisSpacing: 16,
                   crossAxisSpacing: 16,
                 ),
@@ -258,7 +258,6 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
           children: [
             // Image Section
             Expanded(
-              flex: 5,
               child: Stack(
                 fit: StackFit.expand,
                 children: [
@@ -308,42 +307,60 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
               ),
             ),
             // Info Section
-            Expanded(
-              flex: 4,
-              child: Padding(
-                padding: const EdgeInsets.all(10),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(product.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: textColor, fontWeight: FontWeight.w800, fontSize: 13)),
-                        const SizedBox(height: 4),
-                        Text('${product.price.toStringAsFixed(0)} FCFA', style: const TextStyle(color: Color(0xFF00E5C5), fontWeight: FontWeight.bold, fontSize: 13)),
-                      ],
-                    ),
+            Padding(
+              padding: const EdgeInsets.all(10),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(product.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: textColor, fontWeight: FontWeight.w800, fontSize: 13)),
+                  const SizedBox(height: 2),
+                  if (product.agencyName != null && product.agencyName!.isNotEmpty)
                     Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text('Stock: ${product.stock}', style: TextStyle(color: outOfStock ? Colors.redAccent : hintColor, fontSize: 11, fontWeight: FontWeight.bold)),
-                        InkWell(
-                          onTap: outOfStock ? null : () => cart.addItem(product),
-                          borderRadius: BorderRadius.circular(8),
-                          child: Container(
-                            padding: const EdgeInsets.all(6),
-                            decoration: BoxDecoration(
-                              color: outOfStock ? Colors.grey.withValues(alpha: 0.2) : AppColors.violet,
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                            child: Icon(Icons.add_shopping_cart_rounded, color: outOfStock ? Colors.grey : Colors.white, size: 16),
+                        Expanded(child: Text(product.agencyName!, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: hintColor, fontSize: 10, fontWeight: FontWeight.w600))),
+                        if (product.isCertified)
+                          const Padding(
+                            padding: EdgeInsets.only(left: 4),
+                            child: Icon(Icons.verified_rounded, color: Color(0xFF6C4EF6), size: 12),
                           ),
-                        ),
                       ],
+                    )
+                  else
+                    Text(product.category.toUpperCase(), maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: AppColors.violet, fontSize: 9, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 4),
+                  Text('${product.price.toStringAsFixed(0)} FCFA', style: const TextStyle(color: Color(0xFF00E5C5), fontWeight: FontWeight.bold, fontSize: 13)),
+                  if (product.description.isNotEmpty) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      product.description,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(color: hintColor, fontSize: 10, height: 1.2),
                     ),
                   ],
-                ),
+                  const SizedBox(height: 8),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Text('Stock: ${product.stock}', style: TextStyle(color: outOfStock ? Colors.redAccent : hintColor, fontSize: 11, fontWeight: FontWeight.bold)),
+                      InkWell(
+                        onTap: outOfStock ? null : () => cart.addItem(product),
+                        borderRadius: BorderRadius.circular(8),
+                        child: Container(
+                          padding: const EdgeInsets.all(6),
+                          decoration: BoxDecoration(
+                            color: outOfStock ? Colors.grey.withValues(alpha: 0.2) : AppColors.violet,
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Icon(Icons.add_shopping_cart_rounded, color: outOfStock ? Colors.grey : Colors.white, size: 16),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
               ),
             ),
           ],

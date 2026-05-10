@@ -551,7 +551,7 @@ class _AgencyTeamScreenState extends ConsumerState<AgencyTeamScreen> {
                        )
                     else ...[
                       if (context.read<AgencyProvider>().enabledServices.contains('store'))
-                        buildServiceRolesSection('🛒 Boutique', 'store', ['Vendeur / Caissier', 'Gestionnaire de Stock', 'Finance']),
+                        buildServiceRolesSection('🛒 Boutique', 'store', ['Vendeur / Caissier', 'Gestionnaire de Stock', 'Finance', 'Livreur']),
                       if (context.read<AgencyProvider>().enabledServices.contains('taxi'))
                         buildServiceRolesSection('🚕 Taxi', 'taxi', ['Chauffeur', 'Gestionnaire de flotte']),
                       if (context.read<AgencyProvider>().enabledServices.contains('tickets'))

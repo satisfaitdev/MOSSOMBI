@@ -35,10 +35,17 @@ class User {
       isActive: json['is_active'] as bool? ?? false,
       isVerified: json['is_verified'] as bool? ?? false,
       avatarUrl: json['avatar_url'] as String?,
-      points: (json['points'] as num?)?.toDouble() ?? 0.0,
+      points: _parseDouble(json['points']),
       userIdDisplay: (json['user_id_display'] as String?)?.replaceAll(RegExp(r'[^0-9]'), ''),
       kycStatus: json['kyc_status'] as String? ?? 'pending',
     );
+  }
+
+  static double _parseDouble(dynamic value) {
+    if (value == null) return 0.0;
+    if (value is num) return value.toDouble();
+    if (value is String) return double.tryParse(value) ?? 0.0;
+    return 0.0;
   }
 
   Map<String, dynamic> toJson() {

@@ -1,3 +1,4 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
@@ -94,11 +95,11 @@ class MossombiSliverAppBar extends StatelessWidget {
         centerTitle: true,
         titlePadding: const EdgeInsets.only(bottom: 16),
         title: Text(title, style: TextStyle(
-          color: textColor,
-          fontWeight: FontWeight.w900,
-          letterSpacing: -0.5,
-        )),
-        background: background,
+              color: textColor,
+              fontWeight: FontWeight.w900,
+              letterSpacing: -0.5,
+            )),
+            background: background,
       ),
     );
   }
@@ -124,52 +125,57 @@ class MossombiAppBar extends StatelessWidget implements PreferredSizeWidget {
     final textColor = isDark ? Colors.white : AppColors.bgDark1;
     final canPop = context.canPop();
 
-    return AppBar(
-      backgroundColor: Colors.transparent,
-      elevation: 0,
-      centerTitle: true,
-      systemOverlayStyle: SystemUiOverlayStyle(
-        statusBarColor: Colors.transparent,
-        statusBarIconBrightness: isDark ? Brightness.light : Brightness.dark,
-        statusBarBrightness: isDark ? Brightness.dark : Brightness.light,
-      ),
-      title: customTitle ?? Text(title, style: TextStyle(
-        color: textColor,
-        fontWeight: FontWeight.w900,
-        fontSize: 20,
-        letterSpacing: -0.5,
-      )),
-      leadingWidth: 72,
-      leading: canPop ? Padding(
-        padding: const EdgeInsets.only(left: 16),
-        child: IconButton(
-          icon: Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: isDark ? Colors.white.withValues(alpha: 0.15) : Colors.black.withValues(alpha: 0.08),
-              shape: BoxShape.circle,
-            ),
-            child: Icon(Icons.arrow_back_ios_new_rounded, color: textColor, size: 20),
+    return ClipRect(
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+        child: AppBar(
+          backgroundColor: isDark ? Colors.black.withValues(alpha: 0.4) : Colors.white.withValues(alpha: 0.4),
+          elevation: 0,
+          centerTitle: true,
+          systemOverlayStyle: SystemUiOverlayStyle(
+            statusBarColor: Colors.transparent,
+            statusBarIconBrightness: isDark ? Brightness.light : Brightness.dark,
+            statusBarBrightness: isDark ? Brightness.dark : Brightness.light,
           ),
-          onPressed: () => context.pop(),
-        ),
-      ) : null,
-      actions: [
-        if (actionIcon != null) ...[
-          IconButton(
-            icon: Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: isDark ? Colors.white.withValues(alpha: 0.1) : Colors.black.withValues(alpha: 0.05),
-                shape: BoxShape.circle,
+          title: customTitle ?? Text(title, style: TextStyle(
+            color: textColor,
+            fontWeight: FontWeight.w900,
+            fontSize: 20,
+            letterSpacing: -0.5,
+          )),
+          leadingWidth: 72,
+          leading: canPop ? Padding(
+            padding: const EdgeInsets.only(left: 16),
+            child: IconButton(
+              icon: Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: isDark ? Colors.white.withValues(alpha: 0.15) : Colors.black.withValues(alpha: 0.08),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(Icons.arrow_back_ios_new_rounded, color: textColor, size: 20),
               ),
-              child: actionIcon,
+              onPressed: () => context.pop(),
             ),
-            onPressed: onActionTap,
-          ),
-          const SizedBox(width: 8),
-        ],
-      ],
+          ) : null,
+          actions: [
+            if (actionIcon != null) ...[
+              IconButton(
+                icon: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: isDark ? Colors.white.withValues(alpha: 0.1) : Colors.black.withValues(alpha: 0.05),
+                    shape: BoxShape.circle,
+                  ),
+                  child: actionIcon,
+                ),
+                onPressed: onActionTap,
+              ),
+              const SizedBox(width: 8),
+            ],
+          ],
+        ),
+      ),
     );
   }
 

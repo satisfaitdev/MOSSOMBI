@@ -34,6 +34,9 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
   final _priceCtrl = TextEditingController();
   final _stockCtrl = TextEditingController(text: "1");
 
+  String _shippingUnit = 'kg';
+  final _shippingValueCtrl = TextEditingController(text: "1.0");
+
   String _category = 'Boutiques Locales';
   List<String> _categories = ['Boutiques Locales', 'Électronique', 'Mode M/F', 'Beauté', 'Santé', 'Auto/Moto', 'Alimentation / Épicerie', 'Maison & Bureau', 'Immobilier', 'Services'];
 
@@ -44,10 +47,13 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
   final _customSpecsCtrl = TextEditingController();
   final _yearCtrl = TextEditingController();
   final _mileageCtrl = TextEditingController();
-  String _electronicMemory = '128 Go';
+  List<String> _electronicMemories = [];
+  final Map<String, TextEditingController> _memoryPriceControllers = {};
   String _electronicBrand = 'Apple';
-  String _modeSize = 'M';
+  List<String> _modeSizes = [];
   String _modeMaterial = 'Coton';
+  String _modeGender = 'Unisexe';
+  String _modeTarget = 'Adulte';
   String _foodWeight = '1 kg';
   String _foodConservation = 'Frais';
   String _immoSurface = '100 m²';
@@ -70,6 +76,7 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
   bool _acceptLoan = false;
   final _firstAdvanceCtrl = TextEditingController();
   final _installmentCtrl = TextEditingController();
+  String _loanFrequency = 'Mensuel';
   String _productCondition = 'Neuf'; // Neuf, Occasion
 
   final List<String> _availableCities = ['Brazzaville', 'Pointe-Noire', 'Dolisie', 'Nkayi', 'Ouesso', 'Owando', 'Kinshasa', 'Lubumbashi'];
@@ -98,6 +105,7 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
     _mileageCtrl.dispose();
     _firstAdvanceCtrl.dispose();
     _installmentCtrl.dispose();
+    _shippingValueCtrl.dispose();
     super.dispose();
   }
 
@@ -112,8 +120,29 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
          _selectedXFiles.add(pickedFile);
          _enhancedImageUrls.clear();
          _generatedVideoUrl = null;
-         _isAIEnhanced = false; // Réinitialiser l'IA vu qu'on a ajouté une image
+         _isAIEnhanced = false;
       });
+    }
+  }
+
+  Future<void> _pickMultiImages() async {
+    final remaining = 3 - _selectedXFiles.length;
+    if (remaining <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Maximum 3 images pour la vue rotative 3D.')));
+      return;
+    }
+    final pickedFiles = await _picker.pickMultiImage(imageQuality: 80, maxWidth: 1200);
+    if (pickedFiles.isNotEmpty) {
+      setState(() {
+        final toAdd = pickedFiles.take(remaining).toList();
+        _selectedXFiles.addAll(toAdd);
+        _enhancedImageUrls.clear();
+        _generatedVideoUrl = null;
+        _isAIEnhanced = false;
+      });
+      if (pickedFiles.length > remaining) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Seules $remaining image(s) ont été ajoutées (max 3).')));
+      }
     }
   }
 
@@ -131,13 +160,13 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Text('Importer une photo', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+            const Text('Importer des photos', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
             const SizedBox(height: 24),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceEvenly,
               children: [
                 _buildSourceBtn(Icons.camera_alt_rounded, 'Caméra', () { context.pop(); _pickImage(ImageSource.camera); }),
-                _buildSourceBtn(Icons.photo_library_rounded, 'Galerie', () { context.pop(); _pickImage(ImageSource.gallery); }),
+                _buildSourceBtn(Icons.photo_library_rounded, 'Galerie\n(Multi)', () { context.pop(); _pickMultiImages(); }),
               ],
             ),
           ],
@@ -243,68 +272,78 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
     }
     
     // Mettre à jour l'origine si elle n'a pas encore été changée
-    if (_origins.first == 'Local 📍') {
+    if (_origins.isNotEmpty && _origins.first == 'Local 📍') {
        _origins[0] = 'Local $_userCountryFlag';
-       _origin = _origins.first;
+       if (widget.productToEdit == null || _origin == 'Local 📍') {
+           _origin = _origins.first;
+       }
     }
   }
 
-  @override
+    @override
   void initState() {
     super.initState();
     if (widget.productToEdit != null) {
        _nameCtrl.text = widget.productToEdit!.name;
+       _descCtrl.text = widget.productToEdit!.description;
+       _priceCtrl.text = widget.productToEdit!.price.toStringAsFixed(0);
+       _stockCtrl.text = widget.productToEdit!.stock.toString();
        
-       String originalDesc = widget.productToEdit!.description;
-       int declIndex = originalDesc.indexOf('[Déclinaisons] :');
-       int specsIndex = originalDesc.indexOf('[Spécifications] :');
-       
-       String cleanDesc = originalDesc;
-       if (declIndex != -1) {
-           cleanDesc = originalDesc.substring(0, declIndex).trim();
-           String declStr = originalDesc.substring(declIndex + 17, specsIndex != -1 ? specsIndex : null).trim();
-           // ex: "64 Go - Gris (Stock: 3), 128 Go - Noir (Stock: 6)"
-           List<String> decls = declStr.split(', ');
-           for (var d in decls) {
-               var parts = d.split(' (Stock: ');
-               if (parts.length == 2) {
-                   String title = parts[0];
-                   int stock = int.tryParse(parts[1].replaceAll(')', '')) ?? 0;
-                   _variants.add({'title': title, 'stock': stock});
-               }
-           }
-       } else if (specsIndex != -1) {
-           cleanDesc = originalDesc.substring(0, specsIndex).trim();
+       // Load variants
+       if (widget.productToEdit!.variants.isNotEmpty) {
+           _variants = List.from(widget.productToEdit!.variants);
        }
        
-       if (specsIndex != -1) {
-           String specsStr = originalDesc.substring(specsIndex + 18).trim();
-           try {
-               Map<String, dynamic> specMap = jsonDecode(specsStr);
-               if (specMap['État'] != null) _productCondition = specMap['État'];
-               if (specMap['Villes disponibles'] != null && specMap['Villes disponibles'] is List) {
-                   _selectedCities.addAll(List<String>.from(specMap['Villes disponibles']));
-               }
-               if (specMap['Autres informations'] != null) _customSpecsCtrl.text = specMap['Autres informations'];
-               if (specMap['Couleurs'] != null && specMap['Couleurs'] is List) {
-                   for (String hex in specMap['Couleurs']) {
-                       try {
-                          int cVal = int.parse(hex.replaceFirst('#', '0xFF'));
-                          _selectedColors.add(Color(cVal));
-                       } catch(e) {}
-                   }
-               }
-               if (specMap['Paiement par prêt'] == 'Oui') {
-                   _acceptLoan = true;
-                   _firstAdvanceCtrl.text = specMap['Première avance'] ?? '';
-                   _installmentCtrl.text = specMap['Montant de versement'] ?? '';
-               }
-           } catch (e) {
-               debugPrint("Erreur parse specifications: $e");
+       // Load specifications properly from the JSON object
+       Map<String, dynamic> specMap = widget.productToEdit!.specifications;
+       
+       if (specMap['État'] != null) _productCondition = specMap['État'];
+       if (specMap['Autres informations'] != null) _customSpecsCtrl.text = specMap['Autres informations'];
+       if (specMap['Couleurs'] != null && specMap['Couleurs'] is List) {
+           for (String hex in specMap['Couleurs']) {
+               try {
+                  int cVal = int.parse(hex.replaceFirst('#', '0xFF'));
+                  _selectedColors.add(Color(cVal));
+               } catch(e) {}
            }
        }
+       if (specMap['Paiement par prêt'] == 'Oui') {
+           _acceptLoan = true;
+           _firstAdvanceCtrl.text = specMap['Première avance']?.toString() ?? '';
+           _installmentCtrl.text = specMap['Montant de versement']?.toString() ?? '';
+           _loanFrequency = specMap['Fréquence de versement']?.toString() ?? 'Mensuel';
+       }
+       if (specMap['shipping_unit'] != null) _shippingUnit = specMap['shipping_unit'].toString();
+       if (specMap['shipping_value'] != null) _shippingValueCtrl.text = specMap['shipping_value'].toString();
        
-       _descCtrl.text = cleanDesc;
+       // Specific Categories matching
+       if (specMap['Marque'] != null) _electronicBrand = specMap['Marque'];
+       if (specMap['Mémoire/Stockage'] != null) {
+           if (specMap['Mémoire/Stockage'] is List) {
+               _electronicMemories = List<String>.from(specMap['Mémoire/Stockage']);
+           } else {
+               _electronicMemories = [specMap['Mémoire/Stockage'].toString()];
+           }
+       }
+       if (specMap['Taille'] != null) {
+           if (specMap['Taille'] is List) {
+               _modeSizes = List<String>.from(specMap['Taille']);
+           } else {
+               _modeSizes = [specMap['Taille'].toString()];
+           }
+       }
+       if (specMap['Matière'] != null) {
+           if (_category == 'Mode M/F') _modeMaterial = specMap['Matière'];
+           if (_category == 'Maison & Bureau') _houseMaterial = specMap['Matière'];
+       }
+       if (specMap['Année'] != null) _yearCtrl.text = specMap['Année'];
+       if (specMap['Kilométrage'] != null) _mileageCtrl.text = specMap['Kilométrage'];
+       if (specMap['Poids/Volume'] != null) _foodWeight = specMap['Poids/Volume'];
+       if (specMap['Conservation'] != null) _foodConservation = specMap['Conservation'];
+       if (specMap['État spécifique'] != null) _houseCondition = specMap['État spécifique'];
+       if (specMap['Surface'] != null) _immoSurface = specMap['Surface'];
+       if (specMap['Pièces'] != null) _immoRooms = specMap['Pièces'];
+       if (specMap['Facturation'] != null) _serviceBilling = specMap['Facturation'];
        _priceCtrl.text = widget.productToEdit!.price.toStringAsFixed(0);
        _stockCtrl.text = widget.productToEdit!.stock.toString();
        
@@ -338,14 +377,60 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
     });
   }
 
-  void _showAddVariantDialog() {
-    final stockCtrl = TextEditingController(text: '1');
-    String? selectedCapacity;
-    String? selectedSize;
+  void _showAddVariantDialog({int? editIndex}) {
+    final Map<String, dynamic>? variantToEdit = editIndex != null ? _variants[editIndex] : null;
+    final stockCtrl = TextEditingController(text: variantToEdit?['stock']?.toString() ?? '1');
+    List<String> selectedMemories = [];
+    List<String> selectedSizes = [];
+    String? selectedWeight;
+    String? selectedSurface;
+    String? selectedCondition;
+    String? selectedDuration;
     List<Color> selectedVariantColors = [];
+    
+    if (variantToEdit != null) {
+      // Restaurer les couleurs
+      if (variantToEdit['colors'] != null) {
+        for (String hex in variantToEdit['colors']) {
+          try {
+            selectedVariantColors.add(Color(int.parse(hex.replaceFirst('#', '0xFF'))));
+          } catch(e) {}
+        }
+      }
+      
+      // Restaurer les sélections à partir du titre (Fallback pour compatibilité)
+      String title = variantToEdit['title'] ?? '';
+      List<String> parts = title.split(' - ');
+      for (var p in parts) {
+        if (p.startsWith('Capacité: ')) {
+          selectedMemories = p.replaceFirst('Capacité: ', '').split(', ');
+        } else if (p.startsWith('Taille: ')) {
+          selectedSizes = p.replaceFirst('Taille: ', '').split(', ');
+        } else if (['100g', '250g', '500g', '1 kg', '2 kg', '5 kg', '10 kg'].contains(p)) {
+          selectedWeight = p;
+        } else if (['Studio', 'T1', 'T2', 'T3', 'T4', 'T5+', 'Local commercial'].contains(p)) {
+          selectedSurface = p;
+        } else if (['Neuf', 'Friperie', 'Occasion', 'Très bon état', 'Bon état', 'Acceptable', 'Pour pièces'].contains(p)) {
+          selectedCondition = p;
+        } else if (['1 heure', '2 heures', '½ journée', '1 jour', '1 semaine', '1 mois', 'Forfait'].contains(p)) {
+          selectedDuration = p;
+        }
+      }
+    }
 
     final List<String> memoryOptions = ['64 Go', '128 Go', '256 Go', '512 Go', '1 To', '2 To'];
-    final List<String> sizeOptions = ['XS', 'S', 'M', 'L', 'XL', 'XXL', '3XL'];
+    final List<String> sizeOptions = [
+      'XS', 'S', 'M', 'L', 'XL', 'XXL', '3XL', '4XL',
+      '35', '36', '37', '38', '39', '40', '41', '42', '43', '44', '45', '46',
+      'Unique'
+    ];
+    final List<String> weightOptions = ['100g', '250g', '500g', '1 kg', '2 kg', '5 kg', '10 kg'];
+    final List<String> surfaceOptions = ['Studio', 'T1', 'T2', 'T3', 'T4', 'T5+', 'Local commercial'];
+    final List<String> conditionOptions = ['Neuf', 'Très bon état', 'Bon état', 'Acceptable', 'Pour pièces'];
+    final List<String> durationOptions = ['1 heure', '2 heures', '½ journée', '1 jour', '1 semaine', '1 mois', 'Forfait'];
+    final List<String> materialOptions = ['Coton', 'Soie', 'Laine', 'Polyester', 'Cuir', 'Jean', 'Lin', 'Synthétique'];
+    final List<String> genderOptions = ['Unisexe', 'Homme', 'Femme'];
+    final List<String> targetOptions = ['Adulte', 'Enfant', 'Bébé', 'Ado'];
 
     showModalBottomSheet(
       context: context,
@@ -371,56 +456,154 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text('📝 Nouvelle Déclinaison', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: textColor)),
-                    const SizedBox(height: 16),
-                    
-                    if (_category == 'Électronique') ...[
+                    const SizedBox(height: 24),
+                     if (_category == 'Électronique') ...[
                       Text('Capacité / Mémoire', style: TextStyle(fontWeight: FontWeight.bold, color: textColor)),
                       const SizedBox(height: 8),
-                      DropdownButtonFormField<String>(
-                        value: selectedCapacity,
-                        dropdownColor: isDark ? AppColors.bgDark1 : Colors.white,
-                        style: TextStyle(color: textColor),
-                        hint: Text('Sélectionner une capacité', style: TextStyle(color: isDark ? Colors.grey : Colors.black54)),
-                        decoration: InputDecoration(
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 15),
-                        ),
-                        items: memoryOptions.map((o) => DropdownMenuItem(value: o, child: Text(o))).toList(),
-                        onChanged: (v) => setModalState(() => selectedCapacity = v),
+                      Wrap(
+                        spacing: 8,
+                        children: memoryOptions.map((mem) {
+                          final isSelected = selectedMemories.contains(mem);
+                          return FilterChip(
+                            label: Text(mem),
+                            selected: isSelected,
+                            onSelected: (selected) {
+                              setModalState(() {
+                                if (selected) selectedMemories.add(mem);
+                                else selectedMemories.remove(mem);
+                              });
+                            },
+                            selectedColor: AppColors.violet.withValues(alpha: 0.2),
+                            checkmarkColor: AppColors.violet,
+                          );
+                        }).toList(),
                       ),
                       const SizedBox(height: 16),
                     ],
 
-                    if (_category == 'Mode M/F') ...[
+                    // --- Mode ---
+                    if (_category == 'Mode M/F' || _category == 'Beauté') ...[
                       Text('Taille', style: TextStyle(fontWeight: FontWeight.bold, color: textColor)),
                       const SizedBox(height: 8),
-                      DropdownButtonFormField<String>(
-                        value: selectedSize,
-                        dropdownColor: isDark ? AppColors.bgDark1 : Colors.white,
-                        style: TextStyle(color: textColor),
-                        hint: Text('Sélectionner une taille', style: TextStyle(color: isDark ? Colors.grey : Colors.black54)),
-                        decoration: InputDecoration(
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 15),
-                        ),
-                        items: sizeOptions.map((o) => DropdownMenuItem(value: o, child: Text(o))).toList(),
-                        onChanged: (v) => setModalState(() => selectedSize = v),
+                      Wrap(
+                        spacing: 8,
+                        children: sizeOptions.map((size) {
+                          final isSelected = selectedSizes.contains(size);
+                          return FilterChip(
+                            label: Text(size),
+                            selected: isSelected,
+                            onSelected: (selected) {
+                              setModalState(() {
+                                if (selected) selectedSizes.add(size);
+                                else selectedSizes.remove(size);
+                              });
+                            },
+                            selectedColor: AppColors.violet.withValues(alpha: 0.2),
+                            checkmarkColor: AppColors.violet,
+                            labelStyle: TextStyle(
+                              color: isSelected ? AppColors.violet : textColor,
+                              fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                            ),
+                          );
+                        }).toList(),
                       ),
                       const SizedBox(height: 16),
                     ],
 
-                    Text('Couleur de cette déclinaison (Cochez plusieurs au besoin)', style: TextStyle(fontWeight: FontWeight.bold, color: textColor)),
+                    // --- Alimentation / Santé ---
+                    if (_category == 'Alimentation / Épicerie' || _category == 'Santé') ...[
+                      Text('Poids / Contenance', style: TextStyle(fontWeight: FontWeight.bold, color: textColor)),
+                      const SizedBox(height: 8),
+                      DropdownButtonFormField<String>(
+                        value: selectedWeight,
+                        dropdownColor: isDark ? AppColors.bgDark1 : Colors.white,
+                        style: TextStyle(color: textColor),
+                        hint: Text('Sélectionner un poids', style: TextStyle(color: isDark ? Colors.grey : Colors.black54)),
+                        decoration: InputDecoration(
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 15),
+                        ),
+                        items: weightOptions.map((o) => DropdownMenuItem(value: o, child: Text(o))).toList(),
+                        onChanged: (v) => setModalState(() => selectedWeight = v),
+                      ),
+                      const SizedBox(height: 16),
+                    ],
+
+                    // --- Immobilier ---
+                    if (_category == 'Immobilier') ...[
+                      Text('Type / Surface', style: TextStyle(fontWeight: FontWeight.bold, color: textColor)),
+                      const SizedBox(height: 8),
+                      DropdownButtonFormField<String>(
+                        value: selectedSurface,
+                        dropdownColor: isDark ? AppColors.bgDark1 : Colors.white,
+                        style: TextStyle(color: textColor),
+                        hint: Text('Sélectionner un type', style: TextStyle(color: isDark ? Colors.grey : Colors.black54)),
+                        decoration: InputDecoration(
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 15),
+                        ),
+                        items: surfaceOptions.map((o) => DropdownMenuItem(value: o, child: Text(o))).toList(),
+                        onChanged: (v) => setModalState(() => selectedSurface = v),
+                      ),
+                      const SizedBox(height: 16),
+                    ],
+
+                    // --- État (Condition) ---
+                    if (['Auto/Moto', 'Maison & Bureau', 'Mode M/F', 'Beauté', 'Électronique'].contains(_category)) ...[
+                      Text('État', style: TextStyle(fontWeight: FontWeight.bold, color: textColor)),
+                      const SizedBox(height: 8),
+                      DropdownButtonFormField<String>(
+                        value: selectedCondition,
+                        dropdownColor: isDark ? AppColors.bgDark1 : Colors.white,
+                        style: TextStyle(color: textColor),
+                        hint: Text('Sélectionner un état', style: TextStyle(color: isDark ? Colors.grey : Colors.black54)),
+                        decoration: InputDecoration(
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 15),
+                        ),
+                        items: ((_category == 'Mode M/F' || _category == 'Beauté') 
+                                ? ['Neuf', 'Friperie', 'Occasion'] 
+                                : conditionOptions)
+                                .map((o) => DropdownMenuItem(value: o, child: Text(o))).toList(),
+                        onChanged: (v) => setModalState(() => selectedCondition = v),
+                      ),
+                      const SizedBox(height: 16),
+                    ],
+
+                    // --- Services ---
+                    if (_category == 'Services') ...[
+                      Text('Durée / Formule', style: TextStyle(fontWeight: FontWeight.bold, color: textColor)),
+                      const SizedBox(height: 8),
+                      DropdownButtonFormField<String>(
+                        value: selectedDuration,
+                        dropdownColor: isDark ? AppColors.bgDark1 : Colors.white,
+                        style: TextStyle(color: textColor),
+                        hint: Text('Sélectionner une durée', style: TextStyle(color: isDark ? Colors.grey : Colors.black54)),
+                        decoration: InputDecoration(
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 15),
+                        ),
+                        items: durationOptions.map((o) => DropdownMenuItem(value: o, child: Text(o))).toList(),
+                        onChanged: (v) => setModalState(() => selectedDuration = v),
+                      ),
+                      const SizedBox(height: 16),
+                    ],
+
+                    Text('Couleurs de la déclinaison (Optionnel)', style: TextStyle(fontWeight: FontWeight.bold, color: textColor)),
                     const SizedBox(height: 12),
                     Wrap(
                       spacing: 12,
                       runSpacing: 12,
                       children: _availableColors.map((color) {
-                        bool isSelected = selectedVariantColors.contains(color);
+                        bool isSelected = selectedVariantColors.any((c) => c.value == color.value);
                         return GestureDetector(
                           onTap: () {
                             setModalState(() {
-                              if (isSelected) selectedVariantColors.remove(color);
-                              else selectedVariantColors.add(color);
+                              if (isSelected) {
+                                selectedVariantColors.removeWhere((c) => c.value == color.value);
+                              } else {
+                                selectedVariantColors.add(color);
+                              }
                             });
                           },
                           child: Container(
@@ -456,21 +639,37 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
                       child: ElevatedButton(
                         onPressed: () {
                           List<String> parts = [];
-                          if (_category == 'Électronique' && selectedCapacity != null) parts.add(selectedCapacity!);
-                          if (_category == 'Mode M/F' && selectedSize != null) parts.add(selectedSize!);
+                          if (selectedMemories.isNotEmpty) parts.add('Capacité: ${selectedMemories.join(', ')}');
+                          if (selectedSizes.isNotEmpty) parts.add('Taille: ${selectedSizes.join(', ')}');
+                          if (selectedWeight != null) parts.add(selectedWeight!);
+                          if (selectedSurface != null) parts.add(selectedSurface!);
+                          if (selectedCondition != null) parts.add(selectedCondition!);
+                          if (selectedDuration != null) parts.add(selectedDuration!);
                           
-                          // Convert colors to hex code list to keep in memory
-                          List<String> hexColors = selectedVariantColors.map((c) => '#${c.value.toRadixString(16).substring(2, 8).toUpperCase()}').toList();
-                          
-                          if (parts.isEmpty) parts.add('Standard'); // Fallback if no size selected
+                          if (parts.isEmpty) parts.add('Standard');
                           String title = parts.join(' - ');
                           
-                          if (stockCtrl.text.isNotEmpty) {
-                            context.pop();
-                          }
+                          List<String> hexColors = selectedVariantColors.map((c) => '#${c.value.toRadixString(16).substring(2, 8).toUpperCase()}').toList();
+                          
+                          int parsedStock = int.tryParse(stockCtrl.text) ?? 1;
+                          
+                          setState(() {
+                            final newVariant = {
+                              'title': title,
+                              'stock': parsedStock,
+                              'colors': hexColors,
+                            };
+                            if (editIndex != null) {
+                              _variants[editIndex] = newVariant;
+                            } else {
+                              _variants.add(newVariant);
+                            }
+                          });
+                          
+                          Navigator.pop(ctx);
                         },
                         style: ElevatedButton.styleFrom(backgroundColor: AppColors.violet, padding: const EdgeInsets.symmetric(vertical: 16), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16))),
-                        child: const Text('Ajouter la déclinaison', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
+                        child: Text(editIndex != null ? 'Modifier la déclinaison' : 'Ajouter la déclinaison', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
                       ),
                     ),
                   ],
@@ -582,6 +781,45 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
     }
   }
 
+  bool _isEstimatingShipping = false;
+
+  Future<void> _estimateShippingWithAI() async {
+    if (_nameCtrl.text.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Veuillez d\'abord saisir le nom du produit')));
+      return;
+    }
+    setState(() => _isEstimatingShipping = true);
+    try {
+      final apiClient = mosombi_api.ApiClient();
+      final response = await apiClient.dio.post('/ai/estimate-shipping', data: {
+        'name': _nameCtrl.text,
+        'description': _descCtrl.text
+      });
+      if (response.statusCode == 200 && response.data['success']) {
+        final data = response.data['data'];
+        if (mounted) {
+           setState(() {
+             if (_shippingUnit == 'kg') {
+               _shippingValueCtrl.text = data['weight_kg']?.toString() ?? '1.0';
+             } else {
+               _shippingValueCtrl.text = data['volume_cbm']?.toString() ?? '0.01';
+             }
+           });
+           ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+             content: Text('✨ Estimation IA: ${data['weight_kg']} kg / ${data['volume_cbm']} CBM'),
+             backgroundColor: const Color(0xFF6C4EF6)
+           ));
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Erreur IA: $e'), backgroundColor: Colors.redAccent));
+      }
+    } finally {
+      if (mounted) setState(() => _isEstimatingShipping = false);
+    }
+  }
+
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
     
@@ -591,6 +829,20 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
       final productProvider = context.read<ProductProvider>();
       final agencyProvider = context.read<AgencyProvider>();
       final price = double.tryParse(_priceCtrl.text) ?? 0.0;
+      
+      // Auto-generate variants from electronic memories if applicable
+      if (_category == 'Électronique' && _electronicMemories.isNotEmpty) {
+        _variants.clear();
+        for (var mem in _electronicMemories) {
+           _variants.add({
+             'title': 'Capacité: $mem',
+             'stock': int.tryParse(_stockCtrl.text) ?? 1,
+             'price': double.tryParse(_memoryPriceControllers[mem]?.text ?? '') ?? price,
+             'colors': _selectedColors.isNotEmpty ? _selectedColors.map((c) => '#${c.value.toRadixString(16).substring(2, 8).toUpperCase()}').toList() : [],
+           });
+        }
+      }
+
       int totalStock = 0;
       if (_variants.isNotEmpty) {
          for (var v in _variants) {
@@ -620,10 +872,12 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
       Map<String, dynamic> specs = {};
       if (_category == 'Électronique') {
         specs['Marque'] = _electronicBrand;
-        specs['Mémoire/Stockage'] = _electronicMemory;
+         specs['Mémoire/Stockage'] = _electronicMemories;
       } else if (_category == 'Mode M/F') {
-        specs['Taille'] = _modeSize;
+        specs['Taille'] = _modeSizes;
         specs['Matière'] = _modeMaterial;
+        specs['Genre'] = _modeGender;
+        specs['Public cible'] = _modeTarget;
       } else if (_category == 'Auto/Moto') {
         specs['Année'] = _yearCtrl.text;
         specs['Kilométrage'] = _mileageCtrl.text;
@@ -648,14 +902,15 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
       if (_selectedColors.isNotEmpty) { // RETRAIT DE _variants.isEmpty POUR GARDER LES CERCLES COULEURS
         specs['Couleurs'] = _selectedColors.map((c) => '#${c.value.toRadixString(16).substring(2, 8).toUpperCase()}').toList();
       }
-      if (_selectedCities.isNotEmpty) {
-        specs['Villes disponibles'] = _selectedCities;
-      }
       if (_acceptLoan) {
         specs['Paiement par prêt'] = 'Oui';
         specs['Première avance'] = _firstAdvanceCtrl.text;
         specs['Montant de versement'] = _installmentCtrl.text;
+        specs['Fréquence de versement'] = _loanFrequency;
       }
+      
+      specs['shipping_unit'] = _shippingUnit;
+      specs['shipping_value'] = double.tryParse(_shippingValueCtrl.text) ?? 1.0;
 
       bool success;
       if (widget.productToEdit != null) {
@@ -666,10 +921,14 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
             price: price,
             stock: totalStock, // Somme des variantes ou valeur manuelle
             category: _category,
+            brand: _category == 'Électronique' ? _electronicBrand : null,
             origin: _origin,
             imageUrl: mainImageUrl, // Front cover
             galleryUrls: finalGallery, // Toutes les vues
+            videoUrl: _generatedVideoUrl ?? "",
             deliveryTime: 'Standard', // Géré par l'admin désormais
+            shippingUnit: _shippingUnit,
+            shippingValue: double.tryParse(_shippingValueCtrl.text) ?? 1.0,
             specifications: specs,
             variants: _variants,
           );
@@ -680,11 +939,15 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
             price: price,
             stock: totalStock, // Somme des variantes ou valeur manuelle
             category: _category,
+            brand: _category == 'Électronique' ? _electronicBrand : null,
             origin: _origin,
             agencyId: agencyProvider.currentAgency?.id ?? '',
             imageUrl: mainImageUrl, // Front cover
             galleryUrls: finalGallery, // Toutes les vues
+            videoUrl: _generatedVideoUrl ?? "",
             deliveryTime: 'Standard', // Géré par l'admin désormais
+            shippingUnit: _shippingUnit,
+            shippingValue: double.tryParse(_shippingValueCtrl.text) ?? 1.0,
             specifications: specs,
             variants: _variants,
           );
@@ -722,52 +985,137 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
 
   Widget _buildDynamicFields(bool isDark, Color textColor, Color hintColor) {
     if (_category == 'Électronique') {
-      return Column(
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: DropdownButtonFormField<String>(
-                  value: _electronicBrand,
-                  decoration: _buildInputDeco('Marque', isDark),
-                  items: ['Apple', 'Samsung', 'Tecno', 'Infinix', 'Huawei', 'HP', 'Dell', 'Autre'].map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
-                  onChanged: (v) => setState(() => _electronicBrand = v!),
-                ),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: DropdownButtonFormField<String>(
-                  value: _electronicMemory,
-                  decoration: _buildInputDeco('Capacité', isDark),
-                  items: ['N/A', '64 Go', '128 Go', '256 Go', '512 Go', '1 To'].map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
-                  onChanged: (v) => setState(() => _electronicMemory = v!),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-        ],
-      );
+      return Builder(builder: (context) {
+              const List<String> memoryOptions = ['N/A', '64 Go', '128 Go', '256 Go', '512 Go', '1 To'];
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Capacité / Mémoire (Sélection multiple)', style: TextStyle(color: textColor, fontWeight: FontWeight.bold, fontSize: 12)),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 4,
+                    children: memoryOptions.map((mem) {
+                      final isSelected = _electronicMemories.contains(mem);
+                      return FilterChip(
+                        label: Text(mem, style: TextStyle(fontSize: 12, color: isSelected ? AppColors.violet : textColor)),
+                        selected: isSelected,
+                        onSelected: (selected) {
+                          setState(() {
+                            if (selected) {
+                              _electronicMemories.add(mem);
+                              _memoryPriceControllers[mem] = TextEditingController(text: _priceCtrl.text);
+                            } else {
+                              _electronicMemories.remove(mem);
+                              _memoryPriceControllers[mem]?.dispose();
+                              _memoryPriceControllers.remove(mem);
+                            }
+                          });
+                        },
+                        selectedColor: AppColors.violet.withValues(alpha: 0.1),
+                        checkmarkColor: AppColors.violet,
+                        backgroundColor: isDark ? Colors.black26 : Colors.grey.shade100,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8), side: BorderSide.none),
+                      );
+                    }).toList(),
+                  ),
+                  const SizedBox(height: 16),
+                  if (_electronicMemories.isNotEmpty) ...[
+                    Text('Prix par Capacité/Mémoire (FCFA)', style: TextStyle(color: textColor, fontWeight: FontWeight.bold, fontSize: 12)),
+                    const SizedBox(height: 8),
+                    ..._electronicMemories.map((mem) {
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 8.0),
+                        child: Row(
+                          children: [
+                            Container(
+                              width: 80,
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+                              decoration: BoxDecoration(color: isDark ? Colors.black26 : Colors.grey.shade200, borderRadius: BorderRadius.circular(12)),
+                              child: Text(mem, style: TextStyle(color: textColor, fontWeight: FontWeight.bold, fontSize: 12)),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: TextFormField(
+                                controller: _memoryPriceControllers[mem],
+                                decoration: _buildInputDeco('Prix pour $mem', isDark),
+                                keyboardType: TextInputType.number,
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    }),
+                  ],
+                  const SizedBox(height: 16),
+                ],
+              );
+            });
     } else if (_category == 'Mode M/F') {
+      final List<String> sizeOptions = [
+        'XS', 'S', 'M', 'L', 'XL', 'XXL', '3XL', '4XL',
+        '35', '36', '37', '38', '39', '40', '41', '42', '43', '44', '45', '46',
+        'Unique'
+      ];
       return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          if (_variants.isEmpty) ...[
+            Text('Taille / Pointure (Sélection multiple)', style: TextStyle(color: textColor, fontWeight: FontWeight.bold, fontSize: 12)),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 4,
+              children: sizeOptions.map((size) {
+                final isSelected = _modeSizes.contains(size);
+                return FilterChip(
+                  label: Text(size, style: TextStyle(fontSize: 12, color: isSelected ? AppColors.violet : textColor)),
+                  selected: isSelected,
+                  onSelected: (selected) {
+                    setState(() {
+                      if (selected) _modeSizes.add(size);
+                      else _modeSizes.remove(size);
+                    });
+                  },
+                  selectedColor: AppColors.violet.withValues(alpha: 0.1),
+                  checkmarkColor: AppColors.violet,
+                  backgroundColor: isDark ? Colors.black26 : Colors.grey.shade100,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8), side: BorderSide.none),
+                );
+              }).toList(),
+            ),
+            const SizedBox(height: 16),
+          ],
           Row(
             children: [
-              Expanded(
-                child: DropdownButtonFormField<String>(
-                  value: _modeSize,
-                  decoration: _buildInputDeco('Taille / Pointure', isDark),
-                  items: ['S', 'M', 'L', 'XL', 'XXL', '38', '39', '40', '41', '42', '43', 'Unique'].map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
-                  onChanged: (v) => setState(() => _modeSize = v!),
-                ),
-              ),
-              const SizedBox(width: 16),
               Expanded(
                 child: DropdownButtonFormField<String>(
                   value: _modeMaterial,
                   decoration: _buildInputDeco('Matière', isDark),
                   items: ['Coton', 'Cuir', 'Synthétique', 'Laine', 'Soie', 'Autre'].map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
                   onChanged: (v) => setState(() => _modeMaterial = v!),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Expanded(
+                child: DropdownButtonFormField<String>(
+                  value: _modeGender,
+                  decoration: _buildInputDeco('Genre', isDark),
+                  items: ['Homme', 'Femme', 'Unisexe'].map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
+                  onChanged: (v) => setState(() => _modeGender = v!),
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: DropdownButtonFormField<String>(
+                  value: _modeTarget,
+                  decoration: _buildInputDeco('Public cible', isDark),
+                  items: ['Bébé', 'Enfant', 'Adulte'].map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
+                  onChanged: (v) => setState(() => _modeTarget = v!),
                 ),
               ),
             ],
@@ -1206,6 +1554,82 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
                 ).animate().fade().slideY(begin: 0.1, end: 0, delay: 300.ms),
                 const SizedBox(height: 16),
 
+                // Logistique (Shipping)
+                GlassContainer(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text('Logistique (International/Local)', style: TextStyle(color: textColor, fontWeight: FontWeight.bold)),
+                          ElevatedButton.icon(
+                            onPressed: _isEstimatingShipping ? null : _estimateShippingWithAI,
+                            icon: _isEstimatingShipping 
+                                ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                                : const Icon(Icons.auto_awesome, size: 16, color: Colors.white),
+                            label: Text(_isEstimatingShipping ? 'Calcul...' : 'Estimer via IA', style: const TextStyle(color: Colors.white, fontSize: 12)),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppColors.violet,
+                              visualDensity: VisualDensity.compact,
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          Expanded(
+                            flex: 2,
+                            child: DropdownButtonFormField<String>(
+                              value: _shippingUnit,
+                              isExpanded: true,
+                              dropdownColor: isDark ? AppColors.bgDark1 : Colors.white,
+                              style: TextStyle(color: textColor, fontSize: 13, fontWeight: FontWeight.w600),
+                              decoration: InputDecoration(
+                                labelText: 'Unité',
+                                labelStyle: const TextStyle(color: Colors.grey, fontSize: 12),
+                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                                filled: true,
+                                fillColor: isDark ? Colors.black26 : Colors.grey.shade100,
+                                contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 15),
+                              ),
+                              items: const [
+                                DropdownMenuItem(value: 'kg', child: Text('Poids (KG)')),
+                                DropdownMenuItem(value: 'cbm', child: Text('Volume (CBM)')),
+                              ],
+                              onChanged: (v) => setState(() => _shippingUnit = v!),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            flex: 3,
+                            child: TextFormField(
+                              controller: _shippingValueCtrl,
+                              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                              style: TextStyle(color: textColor, fontWeight: FontWeight.bold, fontSize: 16),
+                              decoration: InputDecoration(
+                                labelText: 'Valeur',
+                                labelStyle: const TextStyle(color: Colors.grey, fontSize: 12),
+                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                                filled: true,
+                                fillColor: isDark ? Colors.black26 : Colors.grey.shade100,
+                                contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 15),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Text('Utilisé pour calculer automatiquement les frais de port (Avion/Bateau) lors du checkout.', style: TextStyle(color: hintColor, fontSize: 11)),
+                    ],
+                  ),
+                ).animate().fade().slideY(begin: 0.1, end: 0, delay: 310.ms),
+                const SizedBox(height: 16),
+
                 // Variantes Section
                 GlassContainer(
                    padding: const EdgeInsets.all(16),
@@ -1216,11 +1640,19 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
                             Text('Déclinaisons (Tailles/Couleurs)', style: TextStyle(color: textColor, fontWeight: FontWeight.bold)),
-                            TextButton.icon(
-                              onPressed: _showAddVariantDialog,
-                              icon: const Icon(Icons.add_circle, size: 18),
-                              label: const Text('Ajouter'),
-                              style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
+                            Container(
+                              decoration: BoxDecoration(
+                                color: AppColors.violet.withValues(alpha: 0.1),
+                                shape: BoxShape.circle,
+                              ),
+                              child: IconButton(
+                                onPressed: _showAddVariantDialog,
+                                icon: const Icon(Icons.add, color: AppColors.violet),
+                                tooltip: 'Ajouter une déclinaison',
+                                padding: EdgeInsets.zero,
+                                constraints: const BoxConstraints(),
+                                iconSize: 24,
+                              ),
                             ),
                           ],
                         ),
@@ -1232,9 +1664,18 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
                                contentPadding: EdgeInsets.zero,
                                title: Text(v['title'], style: TextStyle(color: textColor, fontWeight: FontWeight.bold)),
                                subtitle: Text('En stock : ${v['stock']}', style: const TextStyle(color: Colors.green)),
-                               trailing: IconButton(
-                                 icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
-                                 onPressed: () => setState(() => _variants.remove(v)),
+                               trailing: Row(
+                                 mainAxisSize: MainAxisSize.min,
+                                 children: [
+                                   IconButton(
+                                     icon: const Icon(Icons.edit_outlined, color: Colors.blueAccent),
+                                     onPressed: () => _showAddVariantDialog(editIndex: _variants.indexOf(v)),
+                                   ),
+                                   IconButton(
+                                     icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
+                                     onPressed: () => setState(() => _variants.remove(v)),
+                                   ),
+                                 ],
                                ),
                              )).toList(),
                            )
@@ -1268,7 +1709,7 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
                 ).animate().fade().slideY(begin: 0.1, end: 0, delay: 350.ms),
                 const SizedBox(height: 16),
 
-                // Dynamic Fields
+                // Dynamic Fields (Toujours affichés pour la cohérence globale)
                 _buildDynamicFields(isDark, textColor, hintColor),
 
                 // Condition, Couleurs et Prêt
@@ -1277,64 +1718,68 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // ETAT
-                      Text('État du produit', style: TextStyle(color: textColor, fontWeight: FontWeight.bold)),
-                      const SizedBox(height: 8),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: RadioListTile<String>(
-                              title: Text('Neuf', style: TextStyle(color: textColor, fontSize: 14)),
-                              contentPadding: EdgeInsets.zero,
-                              value: 'Neuf',
-                              groupValue: _productCondition,
-                              activeColor: AppColors.violet,
-                              onChanged: (v) => setState(() => _productCondition = v!),
-                            ),
-                          ),
-                          Expanded(
-                            child: RadioListTile<String>(
-                              title: Text('Occasion', style: TextStyle(color: textColor, fontSize: 14)),
-                              contentPadding: EdgeInsets.zero,
-                              value: 'Occasion',
-                              groupValue: _productCondition,
-                              activeColor: AppColors.violet,
-                              onChanged: (v) => setState(() => _productCondition = v!),
-                            ),
-                          ),
-                        ],
-                      ),
-                      const Divider(height: 32),
-                      
-                      // COULEURS
-                      Text('Couleurs disponibles', style: TextStyle(color: textColor, fontWeight: FontWeight.bold)),
-                      const SizedBox(height: 12),
-                      Wrap(
-                        spacing: 12,
-                        runSpacing: 12,
-                        children: _availableColors.map((color) {
-                          bool isSelected = _selectedColors.contains(color);
-                          return GestureDetector(
-                            onTap: () {
-                              setState(() {
-                                if (isSelected) _selectedColors.remove(color);
-                                else _selectedColors.add(color);
-                              });
-                            },
-                            child: Container(
-                              width: 36, height: 36,
-                              decoration: BoxDecoration(
-                                color: color,
-                                shape: BoxShape.circle,
-                                border: Border.all(color: isSelected ? AppColors.violet : Colors.black12, width: isSelected ? 3 : 1),
-                                boxShadow: isSelected ? [BoxShadow(color: AppColors.violet.withValues(alpha: 0.4), blurRadius: 8, spreadRadius: 2)] : [],
+                      // ETAT & COULEURS (Masqués si des déclinaisons existent OU selon la catégorie)
+                      if (_variants.isEmpty && !['Alimentation / Épicerie', 'Immobilier', 'Services', 'Santé'].contains(_category)) ...[
+                        Text('État du produit', style: TextStyle(color: textColor, fontWeight: FontWeight.bold)),
+                        const SizedBox(height: 8),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: RadioListTile<String>(
+                                title: Text('Neuf', style: TextStyle(color: textColor, fontSize: 14)),
+                                contentPadding: EdgeInsets.zero,
+                                value: 'Neuf',
+                                groupValue: _productCondition,
+                                activeColor: AppColors.violet,
+                                onChanged: (v) => setState(() => _productCondition = v!),
                               ),
-                              child: isSelected ? Icon(Icons.check, color: color.computeLuminance() > 0.5 ? Colors.black : Colors.white, size: 20) : null,
                             ),
-                          );
-                        }).toList(),
-                      ),
-                      const Divider(height: 32),
+                            Expanded(
+                              child: RadioListTile<String>(
+                                title: Text(_category == 'Mode M/F' ? 'Friperie' : 'Occasion', style: TextStyle(color: textColor, fontSize: 14)),
+                                contentPadding: EdgeInsets.zero,
+                                value: 'Occasion',
+                                groupValue: _productCondition,
+                                activeColor: AppColors.violet,
+                                onChanged: (v) => setState(() => _productCondition = v!),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const Divider(height: 32),
+                        
+                        Text('Couleurs disponibles', style: TextStyle(color: textColor, fontWeight: FontWeight.bold)),
+                        const SizedBox(height: 12),
+                        Wrap(
+                          spacing: 12,
+                          runSpacing: 12,
+                          children: _availableColors.map((color) {
+                            bool isSelected = _selectedColors.any((c) => c.value == color.value);
+                            return GestureDetector(
+                              onTap: () {
+                                setState(() {
+                                  if (isSelected) {
+                                    _selectedColors.removeWhere((c) => c.value == color.value);
+                                  } else {
+                                    _selectedColors.add(color);
+                                  }
+                                });
+                              },
+                              child: Container(
+                                width: 36, height: 36,
+                                decoration: BoxDecoration(
+                                  color: color,
+                                  shape: BoxShape.circle,
+                                  border: Border.all(color: isSelected ? AppColors.violet : Colors.black12, width: isSelected ? 3 : 1),
+                                  boxShadow: isSelected ? [BoxShadow(color: AppColors.violet.withValues(alpha: 0.4), blurRadius: 8, spreadRadius: 2)] : [],
+                                ),
+                                child: isSelected ? Icon(Icons.check, color: color.computeLuminance() > 0.5 ? Colors.black : Colors.white, size: 20) : null,
+                              ),
+                            );
+                          }).toList(),
+                        ),
+                        const Divider(height: 32),
+                      ],
                       
                       // PRET
                       SwitchListTile(
@@ -1350,6 +1795,7 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
                         Row(
                           children: [
                             Expanded(
+                              flex: 1,
                               child: TextFormField(
                                 controller: _firstAdvanceCtrl,
                                 keyboardType: TextInputType.number,
@@ -1365,17 +1811,42 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
                             ),
                             const SizedBox(width: 8),
                             Expanded(
+                              flex: 1,
                               child: TextFormField(
                                 controller: _installmentCtrl,
                                 keyboardType: TextInputType.number,
                                 style: TextStyle(color: textColor),
                                 decoration: InputDecoration(
-                                  labelText: 'Versement usuel',
+                                  labelText: 'Versement',
                                   labelStyle: const TextStyle(fontSize: 12),
                                   border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
                                   filled: true,
                                   fillColor: isDark ? Colors.black26 : Colors.grey.shade100,
                                 ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              flex: 1,
+                              child: DropdownButtonFormField<String>(
+                                value: _loanFrequency,
+                                isExpanded: true,
+                                dropdownColor: isDark ? AppColors.bgDark1 : Colors.white,
+                                style: TextStyle(color: textColor, fontSize: 13, fontWeight: FontWeight.w600),
+                                decoration: InputDecoration(
+                                  labelText: 'Fréquence',
+                                  labelStyle: const TextStyle(fontSize: 12),
+                                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                                  filled: true,
+                                  fillColor: isDark ? Colors.black26 : Colors.grey.shade100,
+                                  contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 15),
+                                ),
+                                items: const [
+                                  DropdownMenuItem(value: 'Journalier', child: Text('Journalier')),
+                                  DropdownMenuItem(value: 'Hebdomadaire', child: Text('Hebdo.')),
+                                  DropdownMenuItem(value: 'Mensuel', child: Text('Mensuel')),
+                                ],
+                                onChanged: (v) => setState(() => _loanFrequency = v!),
                               ),
                             ),
                           ],
@@ -1406,37 +1877,6 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
                         ),
                         style: TextStyle(color: textColor),
                       ),
-                      const SizedBox(height: 16),
-                      Text('Villes de disponibilité *', style: TextStyle(color: textColor, fontWeight: FontWeight.bold)),
-                      const SizedBox(height: 8),
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
-                        children: _availableCities.map((city) {
-                           final isSelected = _selectedCities.contains(city);
-                           return FilterChip(
-                             label: Text(city, style: TextStyle(color: isSelected ? Colors.white : textColor, fontSize: 12)),
-                             selected: isSelected,
-                             selectedColor: AppColors.violet,
-                             backgroundColor: isDark ? Colors.white.withValues(alpha: 0.1) : Colors.black.withValues(alpha: 0.05),
-                             checkmarkColor: Colors.white,
-                             onSelected: (bool selected) {
-                               setState(() {
-                                 if (selected) {
-                                   _selectedCities.add(city);
-                                 } else {
-                                   _selectedCities.remove(city);
-                                 }
-                               });
-                             },
-                           );
-                        }).toList(),
-                      ),
-                      if (_selectedCities.isEmpty)
-                         Padding(
-                           padding: const EdgeInsets.only(top: 4.0),
-                           child: Text('Veuillez sélectionner au moins une ville.', style: TextStyle(color: Colors.redAccent, fontSize: 11)),
-                         ),
                     ],
                   ),
                 ).animate().fade().slideY(begin: 0.1, end: 0, delay: 380.ms),

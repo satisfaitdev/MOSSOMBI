@@ -1,3 +1,5 @@
+version: "3.8"
+
 services:
   postgres:
     image: postgis/postgis:15-3.4
@@ -7,14 +9,14 @@ services:
         condition: unless-stopped
     environment:
       POSTGRES_DB: mossombi
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: Kbg-0042
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
     ports:
       - "15432:5432"
     volumes:
       - mossombi_pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d mossombi"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d mossombi"]
       interval: 5s
       timeout: 3s
       retries: 20
@@ -30,6 +32,45 @@ services:
       - "6379:6379"
     volumes:
       - mossombi_redisdata:/data
+
+  backend:
+    image: node:24-slim
+    container_name: mossombi-backend
+    working_dir: /usr/src/app
+    volumes:
+      - .:/usr/src/app
+      - /usr/src/app/node_modules
+    ports:
+      - "3000:3000"
+    command: sh -c "npm install && npm start"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    environment:
+      NODE_ENV: development
+      DATABASE_URL: ${DATABASE_URL:-postgresql://postgres:changeme@postgres:5432/mossombi}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+    env_file:
+      - .env.docker
+
+  # Service admin pour le développement local uniquement
+  admin:
+    image: node:24-slim
+    container_name: mossombi-admin
+    working_dir: /usr/src/app
+    volumes:
+      - ../admin:/usr/src/app
+      - /usr/src/app/node_modules
+    ports:
+      - "3001:3000"
+    command: sh -c "npm install && npm run dev"
+    depends_on:
+      - backend
+    env_file:
+      - ../admin/.env
 
 volumes:
   mossombi_pgdata:

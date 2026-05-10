@@ -40,7 +40,7 @@ const checkoutSchema = Joi.object({
   client_name: Joi.string().allow('').max(200).optional(),
   client_phone: Joi.string().allow('').max(32).optional(),
   delivery_address: Joi.string().allow('').max(500).optional(),
-  delivery_method: Joi.string().valid('standard', 'express', 'pickup', 'delivery').default('standard'),
+  delivery_method: Joi.string().valid('pickup', 'local_instant', 'local_standard', 'intl_avion', 'intl_bateau').default('local_standard'),
   payment_method: Joi.string().valid('credit_card', 'mobile_money', 'cash', 'bank_transfer', 'crypto').required(),
   notes: Joi.string().allow('').max(500).optional(),
 });
@@ -222,6 +222,69 @@ router.get('/products/:id', asyncHandler(async (req, res) => {
   return res.json({ success: true, data: enrichedProduct });
 }));
 
+// 🚚 POST /api/v1/store-enhanced/shipping-quote - Devis de livraison dynamique
+router.post('/shipping-quote', asyncHandler(async (req, res) => {
+  const { items } = req.body;
+  if (!items || !Array.isArray(items) || items.length === 0) {
+    throw new ValidationError('Articles requis');
+  }
+
+  const ids = items.map(i => i.article_id);
+  const { data: articles, error: artErr } = await dbAdmin
+    .from('agency_articles')
+    .select('id, agency_id, name, shipping_unit, shipping_value')
+    .in('id', ids);
+
+  if (artErr) throw new ValidationError('Erreur de récupération des articles');
+
+  const { data: settingsData } = await dbAdmin.from('app_settings').select('*').in('key', ['delivery_local_instant', 'delivery_local_standard', 'delivery_intl_avion_kg', 'delivery_intl_bateau_cbm']);
+  const settings = {};
+  if (settingsData) {
+    settingsData.forEach(s => { settings[s.key] = s.value?.price || 0; });
+  }
+  const localInstantPrice = settings['delivery_local_instant'] || 1000;
+  const localStandardPrice = settings['delivery_local_standard'] || 500;
+  const intlAvionPrice = settings['delivery_intl_avion_kg'] || 8000;
+  const intlBateauPrice = settings['delivery_intl_bateau_cbm'] || 250000; // 250,000 par cbm
+
+  let totalWeight = 0;
+  let totalVolume = 0;
+  let totalQty = 0;
+
+  const byId = new Map((articles || []).map(a => [String(a.id), a]));
+  for (const item of items) {
+    const art = byId.get(String(item.article_id));
+    if (!art) continue;
+    const qty = Number(item.quantity || 1);
+    totalQty += qty;
+    if (art.shipping_unit === 'kg') {
+      totalWeight += Number(art.shipping_value || 1) * qty;
+    } else if (art.shipping_unit === 'cbm') {
+      totalVolume += Number(art.shipping_value || 0.01) * qty;
+    }
+  }
+
+  // Le volume peut aussi être converti en poids volumétrique pour l'avion (ex: 1 CBM = 167 kg)
+  // Mais restons simples:
+  const intlAvionTotal = (totalWeight + (totalVolume * 167)) * intlAvionPrice;
+  const intlBateauTotal = (totalVolume + (totalWeight / 1000)) * intlBateauPrice;
+
+  return res.json({
+    success: true,
+    data: {
+      local_standard: localStandardPrice,
+      local_instant: localInstantPrice,
+      intl_avion: intlAvionTotal,
+      intl_bateau: intlBateauTotal,
+      details: {
+        total_weight_kg: totalWeight,
+        total_volume_cbm: totalVolume,
+        items_count: totalQty
+      }
+    }
+  });
+}));
+
 // 🛒 POST /api/v1/store-enhanced/checkout - Checkout amélioré
 router.post('/checkout', authenticateToken, asyncHandler(async (req, res) => {
   const { error, value } = checkoutSchema.validate(req.body);
@@ -230,10 +293,21 @@ router.post('/checkout', authenticateToken, asyncHandler(async (req, res) => {
   const ids = value.items.map(i => i.article_id);
   const { data: articles, error: artErr } = await dbAdmin
     .from('agency_articles')
-    .select('id, agency_id, name, price, metadata, status')
+    .select('id, agency_id, name, price, metadata, status, shipping_unit, shipping_value')
     .in('id', ids);
 
   if (artErr) throw new ValidationError(`Erreur chargement articles: ${String(artErr.message || '')}`);
+
+  // Récupérer les tarifs logistiques dynamiques depuis app_settings
+  const { data: settingsData } = await dbAdmin.from('app_settings').select('*').in('key', ['delivery_local_instant', 'delivery_local_standard', 'delivery_intl_avion_kg', 'delivery_intl_bateau_cbm']);
+  const settings = {};
+  if (settingsData) {
+    settingsData.forEach(s => { settings[s.key] = s.value?.price || 0; });
+  }
+  const localInstantPrice = settings['delivery_local_instant'] || 1000;
+  const localStandardPrice = settings['delivery_local_standard'] || 500;
+  const intlAvionPrice = settings['delivery_intl_avion_kg'] || 8000;
+  const intlBateauPrice = settings['delivery_intl_bateau_cbm'] || 250000;
 
   const byId = new Map((articles || []).map(a => [String(a.id), a]));
 
@@ -270,9 +344,20 @@ router.post('/checkout', authenticateToken, asyncHandler(async (req, res) => {
     
     total_amount += final_amount;
 
-    // Coût de livraison
-    const deliveryCost = metadata.delivery?.delivery_cost || 0;
-    const itemDeliveryCost = value.delivery_method === 'pickup' ? 0 : deliveryCost;
+    // Coût de livraison dynamique par article
+    let itemDeliveryCost = 0;
+    if (value.delivery_method === 'local_instant') {
+      itemDeliveryCost = localInstantPrice;
+    } else if (value.delivery_method === 'local_standard') {
+      itemDeliveryCost = localStandardPrice;
+    } else if (value.delivery_method === 'intl_avion') {
+      const weight = art.shipping_unit === 'kg' ? Number(art.shipping_value || 0) : 1;
+      itemDeliveryCost = intlAvionPrice * weight * qty;
+    } else if (value.delivery_method === 'intl_bateau') {
+      const volume = art.shipping_unit === 'cbm' ? Number(art.shipping_value || 0) : 1;
+      itemDeliveryCost = intlBateauPrice * volume * qty;
+    }
+    
     total_delivery_cost += itemDeliveryCost;
 
     rows.push({
@@ -322,6 +407,21 @@ router.post('/checkout', authenticateToken, asyncHandler(async (req, res) => {
     .select('*');
 
   if (saleErr) throw new ValidationError(`Erreur création vente: ${String(saleErr.message || '')}`);
+
+  // Create deliveries for items requiring it
+  if (value.delivery_method !== 'pickup') {
+    const deliveryRows = (sales || []).map(sale => ({
+      id: crypto.randomUUID(),
+      sale_id: sale.id,
+      status: 'pending_assignment',
+      tracking_history: [{ status: 'pending_assignment', timestamp: now }],
+      created_at: now,
+      updated_at: now
+    }));
+    if (deliveryRows.length > 0) {
+      await dbAdmin.from('deliveries').insert(deliveryRows);
+    }
+  }
 
   return res.status(201).json({
     success: true,
@@ -407,17 +507,20 @@ router.get('/search/filters', asyncHandler(async (req, res) => {
   });
 }));
 
-// 🔧 Fonction utilitaire pour estimation de livraison
 function getEstimatedDelivery(method) {
   switch (method) {
-    case 'express':
-      return '1-2 jours';
-    case 'standard':
-      return '3-5 jours';
+    case 'local_instant':
+      return 'Moins de 30 minutes';
+    case 'local_standard':
+      return '1 à 2 heures';
+    case 'intl_avion':
+      return '3 à 5 jours';
+    case 'intl_bateau':
+      return '30 à 45 jours';
     case 'pickup':
-      return 'Disponible immédiatement';
+      return 'Disponible immédiatement en agence';
     default:
-      return '3-5 jours';
+      return 'Non défini';
   }
 }
 

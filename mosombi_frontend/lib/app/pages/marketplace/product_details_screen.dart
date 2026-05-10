@@ -21,9 +21,11 @@ class ProductDetailsScreen extends StatefulWidget {
 
 class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
   int _selectedVariant = 0;
+  String? _selectedSubVariantName;
   int _selectedColor = 0;
   int _currentImageIndex = 0;
-  bool _wantsLoan = false; // Checkbox for loan
+  bool _wantsLoan = false; 
+  String _selectedDestination = 'Bénin'; // Destination par défaut
 
   List<Map<String, dynamic>> _variants = [];
   Map<String, dynamic> _specifications = {};
@@ -34,73 +36,32 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
   void initState() {
     super.initState();
     _parseDescription();
+    // Charger les paramètres logistiques pour l'estimation
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      context.read<CartProvider>().fetchLogisticsSettings();
+    });
   }
 
   void _parseDescription() {
-       String originalDesc = widget.product.description;
-       int declIndex = originalDesc.indexOf('[Déclinaisons] :');
-       int specsIndex = originalDesc.indexOf('[Spécifications] :');
-       int galleryIndex = originalDesc.indexOf('[Galerie] :');
+       _cleanDescription = widget.product.description;
+       _variants = List<Map<String, dynamic>>.from(widget.product.variants);
+       _specifications = Map<String, dynamic>.from(widget.product.specifications);
        
-       // Sort indices to find the boundary of clean description
-       List<int> indices = [declIndex, specsIndex, galleryIndex].where((i) => i != -1).toList();
-       indices.sort();
-       
-       String cleanDesc = originalDesc;
-       if (indices.isNotEmpty) {
-           cleanDesc = originalDesc.substring(0, indices.first).trim();
+       if (_variants.isNotEmpty) {
+           String title = _variants[0]['title']?.toString() ?? '';
+           String labelPart = title.split(' - ').first.replaceAll('Taille: ', '').replaceAll('Capacité: ', '').trim();
+           _selectedSubVariantName = labelPart.split(',').first.trim();
+       } else if (_specifications['Mémoire/Stockage'] != null && _specifications['Mémoire/Stockage'] is List && (_specifications['Mémoire/Stockage'] as List).isNotEmpty) {
+           _selectedSubVariantName = (_specifications['Mémoire/Stockage'] as List).first.toString().trim();
+       } else if (_specifications['Taille'] != null && _specifications['Taille'] is List && (_specifications['Taille'] as List).isNotEmpty) {
+           _selectedSubVariantName = (_specifications['Taille'] as List).first.toString().trim();
+       } else if (_specifications['Poids/Volume'] != null && _specifications['Poids/Volume'] is List && (_specifications['Poids/Volume'] as List).isNotEmpty) {
+           _selectedSubVariantName = (_specifications['Poids/Volume'] as List).first.toString().trim();
        }
 
-       if (declIndex != -1) {
-           int end = specsIndex != -1 ? specsIndex : (galleryIndex != -1 ? galleryIndex : originalDesc.length);
-           if (declIndex > end) end = galleryIndex != -1 && galleryIndex > declIndex ? galleryIndex : originalDesc.length;
-           // Find next tag
-           var remainingTags = indices.where((i) => i > declIndex).toList();
-           int nextTag = remainingTags.isNotEmpty ? remainingTags.first : originalDesc.length;
-           
-           String declStr = originalDesc.substring(declIndex + 17, nextTag).trim();
-           List<String> decls = declStr.split(', ');
-           for (var d in decls) {
-               var parts = d.split(' (Stock: ');
-               if (parts.length == 2) {
-                   String fullTitle = parts[0];
-                   int stock = int.tryParse(parts[1].replaceAll(')', '')) ?? 0;
-                   List<String> colors = [];
-                   
-                   // Extraire les couleurs si existantes (ex: M [Couleurs: #FF0000|#00FF00])
-                   int colorStart = fullTitle.indexOf(' [Couleurs: ');
-                   if (colorStart != -1) {
-                        String colorStr = fullTitle.substring(colorStart + 12, fullTitle.length - 1);
-                        colors = colorStr.split('|');
-                        fullTitle = fullTitle.substring(0, colorStart).trim();
-                   }
-                   
-                   _variants.add({'title': fullTitle, 'stock': stock, 'colors': colors});
-               }
-           }
+       if (widget.product.galleryUrls.isNotEmpty) {
+           _parsedGalleryUrls = List<String>.from(widget.product.galleryUrls);
        }
-       
-       if (specsIndex != -1) {
-           var remainingTags = indices.where((i) => i > specsIndex).toList();
-           int nextTag = remainingTags.isNotEmpty ? remainingTags.first : originalDesc.length;
-           String specsStr = originalDesc.substring(specsIndex + 18, nextTag).trim();
-           try {
-               _specifications = jsonDecode(specsStr);
-           } catch (e) {
-               debugPrint("Erreur parse specifications: $e");
-           }
-       }
-
-       if (galleryIndex != -1) {
-           var remainingTags = indices.where((i) => i > galleryIndex).toList();
-           int nextTag = remainingTags.isNotEmpty ? remainingTags.first : originalDesc.length;
-           String gStr = originalDesc.substring(galleryIndex + 11, nextTag).trim();
-           if (gStr.isNotEmpty) {
-              _parsedGalleryUrls = gStr.split(',');
-           }
-       }
-       
-       _cleanDescription = cleanDesc;
   }
 
   @override
@@ -233,16 +194,36 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                   // Title & Price
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Expanded(
-                        child: Text(widget.product.name, style: TextStyle(color: textColor, fontSize: 24, fontWeight: FontWeight.w900, height: 1.2)),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(widget.product.name, style: TextStyle(color: textColor, fontSize: 24, fontWeight: FontWeight.w900, height: 1.2)),
+                            if (widget.product.brand != null && widget.product.brand!.isNotEmpty)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 4.0),
+                                child: Text(widget.product.brand!, style: const TextStyle(color: AppColors.violet, fontSize: 14, fontWeight: FontWeight.bold)),
+                              ),
+                          ],
+                        ),
                       ),
                       const SizedBox(width: 16),
                       Column(
                         crossAxisAlignment: CrossAxisAlignment.end,
                         children: [
-                          Text('${widget.product.price.toStringAsFixed(0)} FCFA', style: const TextStyle(color: Color(0xFF00E5C5), fontSize: 20, fontWeight: FontWeight.w900, letterSpacing: -0.5)),
+                          Builder(
+                            builder: (context) {
+                              double displayPrice = widget.product.price;
+                              if (_variants.isNotEmpty && _selectedVariant >= 0 && _selectedVariant < _variants.length) {
+                                final variantPrice = _variants[_selectedVariant]['price'];
+                                if (variantPrice != null) {
+                                  displayPrice = double.tryParse(variantPrice.toString()) ?? displayPrice;
+                                }
+                              }
+                              return Text('${displayPrice.toStringAsFixed(0)} ${widget.product.currency}', style: const TextStyle(color: Color(0xFF00E5C5), fontSize: 20, fontWeight: FontWeight.w900, letterSpacing: -0.5));
+                            }
+                          ),
                           const SizedBox(height: 4),
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -256,17 +237,17 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                   
                   const SizedBox(height: 24),
                   
-                  // Meta Info (Origin)
+                  // Meta Info (Origin + État)
                   Row(
                     children: [
                       Expanded(
                         child: _buildMetaCard(Icons.flight_takeoff_rounded, 'Origine', widget.product.origin, const Color(0xFFFF9800), isDark),
                       ),
                       const SizedBox(width: 16),
-                      if (_specifications['État'] != null)
-                         Expanded(
-                           child: _buildMetaCard(Icons.verified_rounded, 'État', _specifications['État'].toString(), const Color(0xFF6C4EF6), isDark),
-                         ),
+                      if (!['Alimentation / Épicerie', 'Immobilier', 'Services', 'Santé'].contains(widget.product.category))
+                        Expanded(
+                          child: _buildMetaCard(Icons.verified_rounded, 'État', _getCombinedCondition(), const Color(0xFF6C4EF6), isDark),
+                        ),
                     ],
                   ),
 
@@ -274,12 +255,121 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                   
                   // Dynamic Options (Déclinaisons)
                   if (_variants.isNotEmpty) ...[
-                    Text('Déclinaisons / Modèles', style: TextStyle(color: textColor, fontSize: 16, fontWeight: FontWeight.w800)),
+                    Text(_getVariantTitle(widget.product.category), style: TextStyle(color: textColor, fontSize: 16, fontWeight: FontWeight.w800)),
                     const SizedBox(height: 12),
                     SingleChildScrollView(
                        scrollDirection: Axis.horizontal,
                        child: Row(
-                         children: _variants.asMap().entries.map((e) => _buildVariantOption(e.key, e.value['title'], isDark)).toList(),
+                         children: () {
+                            List<Widget> options = [];
+                            for (int i=0; i<_variants.length; i++) {
+                               String title = _variants[i]['title']?.toString() ?? '';
+                               String labelPart = title.split(' - ').first.replaceAll('Taille: ', '').replaceAll('Capacité: ', '').trim();
+                               List<String> subOptions = labelPart.split(',');
+                               for (String sub in subOptions) {
+                                   String cleanSub = sub.trim();
+                                   if (cleanSub.isEmpty) continue;
+                                   bool isSelected = (_selectedVariant == i && _selectedSubVariantName == cleanSub);
+                                   options.add(
+                                       GestureDetector(
+                                          onTap: () => setState(() { _selectedVariant = i; _selectedSubVariantName = cleanSub; }),
+                                          child: Container(
+                                            margin: const EdgeInsets.only(right: 12),
+                                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                                            decoration: BoxDecoration(
+                                              color: isSelected ? const Color(0xFF6C4EF6) : Colors.transparent,
+                                              borderRadius: BorderRadius.circular(12),
+                                              border: Border.all(color: isSelected ? const Color(0xFF6C4EF6) : Colors.grey.withValues(alpha: 0.3)),
+                                            ),
+                                            child: Text(cleanSub, style: TextStyle(color: isSelected ? Colors.white : (isDark ? Colors.white70 : Colors.black87), fontWeight: FontWeight.bold)),
+                                          )
+                                       )
+                                   );
+                               }
+                            }
+                            return options;
+                         }()
+                       ),
+                    ),
+                    const SizedBox(height: 24),
+                  ] else if (_specifications['Mémoire/Stockage'] != null && _specifications['Mémoire/Stockage'] is List && (_specifications['Mémoire/Stockage'] as List).isNotEmpty) ...[
+                    Text('Mémoire / Stockage', style: TextStyle(color: textColor, fontSize: 16, fontWeight: FontWeight.w800)),
+                    const SizedBox(height: 12),
+                    SingleChildScrollView(
+                       scrollDirection: Axis.horizontal,
+                       child: Row(
+                         children: (_specifications['Mémoire/Stockage'] as List).map((mem) {
+                             String cleanSub = mem.toString().trim();
+                             if (cleanSub.isEmpty) return const SizedBox();
+                             bool isSelected = (_selectedSubVariantName == cleanSub);
+                             return GestureDetector(
+                                onTap: () => setState(() { _selectedSubVariantName = cleanSub; }),
+                                child: Container(
+                                  margin: const EdgeInsets.only(right: 12),
+                                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                                  decoration: BoxDecoration(
+                                    color: isSelected ? const Color(0xFF6C4EF6) : Colors.transparent,
+                                    borderRadius: BorderRadius.circular(12),
+                                    border: Border.all(color: isSelected ? const Color(0xFF6C4EF6) : Colors.grey.withValues(alpha: 0.3)),
+                                  ),
+                                  child: Text(cleanSub, style: TextStyle(color: isSelected ? Colors.white : (isDark ? Colors.white70 : Colors.black87), fontWeight: FontWeight.bold)),
+                                )
+                             );
+                         }).toList(),
+                       ),
+                    ),
+                    const SizedBox(height: 24),
+                  ] else if (_specifications['Taille'] != null && _specifications['Taille'] is List && (_specifications['Taille'] as List).isNotEmpty) ...[
+                    Text('Tailles disponibles', style: TextStyle(color: textColor, fontSize: 16, fontWeight: FontWeight.w800)),
+                    const SizedBox(height: 12),
+                    SingleChildScrollView(
+                       scrollDirection: Axis.horizontal,
+                       child: Row(
+                         children: (_specifications['Taille'] as List).map((sz) {
+                             String cleanSub = sz.toString().trim();
+                             if (cleanSub.isEmpty) return const SizedBox();
+                             bool isSelected = (_selectedSubVariantName == cleanSub);
+                             return GestureDetector(
+                                onTap: () => setState(() { _selectedSubVariantName = cleanSub; }),
+                                child: Container(
+                                  margin: const EdgeInsets.only(right: 12),
+                                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                                  decoration: BoxDecoration(
+                                    color: isSelected ? const Color(0xFF6C4EF6) : Colors.transparent,
+                                    borderRadius: BorderRadius.circular(12),
+                                    border: Border.all(color: isSelected ? const Color(0xFF6C4EF6) : Colors.grey.withValues(alpha: 0.3)),
+                                  ),
+                                  child: Text(cleanSub, style: TextStyle(color: isSelected ? Colors.white : (isDark ? Colors.white70 : Colors.black87), fontWeight: FontWeight.bold)),
+                                )
+                             );
+                         }).toList(),
+                       ),
+                    ),
+                    const SizedBox(height: 24),
+                  ] else if (_specifications['Poids/Volume'] != null && _specifications['Poids/Volume'] is List && (_specifications['Poids/Volume'] as List).isNotEmpty) ...[
+                    Text('Poids / Volume', style: TextStyle(color: textColor, fontSize: 16, fontWeight: FontWeight.w800)),
+                    const SizedBox(height: 12),
+                    SingleChildScrollView(
+                       scrollDirection: Axis.horizontal,
+                       child: Row(
+                         children: (_specifications['Poids/Volume'] as List).map((pv) {
+                             String cleanSub = pv.toString().trim();
+                             if (cleanSub.isEmpty) return const SizedBox();
+                             bool isSelected = (_selectedSubVariantName == cleanSub);
+                             return GestureDetector(
+                                onTap: () => setState(() { _selectedSubVariantName = cleanSub; }),
+                                child: Container(
+                                  margin: const EdgeInsets.only(right: 12),
+                                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                                  decoration: BoxDecoration(
+                                    color: isSelected ? const Color(0xFF6C4EF6) : Colors.transparent,
+                                    borderRadius: BorderRadius.circular(12),
+                                    border: Border.all(color: isSelected ? const Color(0xFF6C4EF6) : Colors.grey.withValues(alpha: 0.3)),
+                                  ),
+                                  child: Text(cleanSub, style: TextStyle(color: isSelected ? Colors.white : (isDark ? Colors.white70 : Colors.black87), fontWeight: FontWeight.bold)),
+                                )
+                             );
+                         }).toList(),
                        ),
                     ),
                     const SizedBox(height: 24),
@@ -287,36 +377,30 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                   
                   // Dynamic Options (Couleurs par Variante)
                   if (_variants.isNotEmpty && _variants[_selectedVariant]['colors'] != null && (_variants[_selectedVariant]['colors'] as List).isNotEmpty) ...[
-                    Text('Couleurs disponibles pour ce modèle', style: TextStyle(color: textColor, fontSize: 16, fontWeight: FontWeight.w800)),
+                    Text('Couleurs disponibles', style: TextStyle(color: textColor, fontSize: 16, fontWeight: FontWeight.bold)),
                     const SizedBox(height: 12),
-                    Row(
+                    Wrap(
+                      spacing: 12, runSpacing: 12,
                       children: (_variants[_selectedVariant]['colors'] as List).asMap().entries.map((e) {
-                         try {
-                            String cString = e.value.toString().replaceFirst('#', '0xFF');
-                            int cVal = int.parse(cString);
-                            return _buildColorOption(e.key, Color(cVal));
-                         } catch (err) {
-                            return const SizedBox();
-                         }
+                         return _buildColorOption(e.key, _parseColor(e.value));
                       }).toList(),
                     ),
                     const SizedBox(height: 24),
-                  ] else if (_specifications['Couleurs'] != null && _specifications['Couleurs'] is List) ...[
-                    Text('Couleurs', style: TextStyle(color: textColor, fontSize: 16, fontWeight: FontWeight.w800)),
+                  ] else if (_specifications['Couleurs'] != null && _specifications['Couleurs'] is List && (_specifications['Couleurs'] as List).isNotEmpty) ...[
+                    Text('Couleurs', style: TextStyle(color: textColor, fontSize: 16, fontWeight: FontWeight.bold)),
                     const SizedBox(height: 12),
-                    Row(
+                    Wrap(
+                      spacing: 12, runSpacing: 12,
                       children: (_specifications['Couleurs'] as List).asMap().entries.map((e) {
-                         try {
-                            String cString = e.value.toString().replaceFirst('#', '0xFF');
-                            int cVal = int.parse(cString);
-                            return _buildColorOption(e.key, Color(cVal));
-                         } catch (err) {
-                            return const SizedBox();
-                         }
+                         return _buildColorOption(e.key, _parseColor(e.value));
                       }).toList(),
                     ),
                     const SizedBox(height: 24),
                   ],
+
+
+                  // Other Specifications (Dynamic Fields)
+                  _buildSpecificationsGrid(textColor, isDark),
 
                   if (_specifications['Villes disponibles'] != null && _specifications['Villes disponibles'] is List) ...[
                      Text('Disponibilité Locale', style: TextStyle(color: textColor, fontSize: 16, fontWeight: FontWeight.w800)),
@@ -349,12 +433,14 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                              Row(
                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                children: [
-                                  Row(
-                                    children: [
-                                      const Icon(Icons.account_balance_wallet_rounded, color: AppColors.violet, size: 20),
-                                      const SizedBox(width: 8),
-                                      Text('Disponible à tempérament (Prêt)', style: TextStyle(color: textColor, fontWeight: FontWeight.w900, fontSize: 13)),
-                                    ],
+                                  Expanded(
+                                    child: Row(
+                                      children: [
+                                        const Icon(Icons.account_balance_wallet_rounded, color: AppColors.violet, size: 20),
+                                        const SizedBox(width: 8),
+                                        const Expanded(child: Text('Disponible à tempérament (Prêt)', style: TextStyle(color: AppColors.violet, fontWeight: FontWeight.w900, fontSize: 13))),
+                                      ],
+                                    ),
                                   ),
                                   Switch(
                                     value: _wantsLoan,
@@ -367,6 +453,8 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                                const SizedBox(height: 8),
                                Text('Première avance : ${_specifications['Première avance'] ?? '?'} FCFA', style: TextStyle(color: hintColor, fontSize: 13, fontWeight: FontWeight.bold)),
                                Text('Versements suivants : ${_specifications['Montant de versement'] ?? '?'} FCFA', style: TextStyle(color: hintColor, fontSize: 13)),
+                               if (_specifications['Fréquence de versement'] != null)
+                                 Text('Fréquence : ${_specifications['Fréquence de versement']}', style: TextStyle(color: hintColor, fontSize: 13, fontStyle: FontStyle.italic)),
                              ],
                           ],
                        ),
@@ -375,7 +463,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                   ],
 
                   if (_specifications['Autres informations'] != null && _specifications['Autres informations'].toString().trim().isNotEmpty) ...[
-                     Text('Spécifications Techniques', style: TextStyle(color: textColor, fontSize: 16, fontWeight: FontWeight.w800)),
+                     Text('Informations Complémentaires', style: TextStyle(color: textColor, fontSize: 16, fontWeight: FontWeight.w800)),
                      const SizedBox(height: 8),
                      Text(_specifications['Autres informations'].toString(), style: TextStyle(color: hintColor, fontSize: 14, height: 1.5)),
                      const SizedBox(height: 24),
@@ -460,7 +548,19 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
         ),
         child: ElevatedButton.icon(
           onPressed: outOfStock ? null : () {
-            cart.addItem(widget.product);
+            String? vTitle;
+            if (_variants.isNotEmpty) {
+               vTitle = _selectedSubVariantName ?? _variants[_selectedVariant]['title'].toString();
+            }
+            
+            String? cHex;
+            if (_variants.isNotEmpty && _variants[_selectedVariant]['colors'] != null && (_variants[_selectedVariant]['colors'] as List).isNotEmpty) {
+               cHex = (_variants[_selectedVariant]['colors'] as List)[_selectedColor].toString();
+            } else if (_specifications['Couleurs'] != null && _specifications['Couleurs'] is List && (_specifications['Couleurs'] as List).isNotEmpty) {
+               cHex = (_specifications['Couleurs'] as List)[_selectedColor].toString();
+            }
+            
+            cart.addItem(widget.product, selectedVariant: vTitle, selectedColor: cHex, wantsLoan: _wantsLoan);
             ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${widget.product.name} ajouté au panier', style: const TextStyle(fontWeight: FontWeight.bold)), backgroundColor: AppColors.violet, behavior: SnackBarBehavior.floating));
           },
           icon: const Icon(Icons.add_shopping_cart_rounded, color: Colors.white),
@@ -478,6 +578,74 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
     );
   }
 
+  String _getVariantTitle(String cat) {
+    if (cat == 'Mode M/F' || cat == 'Beauté') return 'Tailles disponibles';
+    if (cat == 'Électronique') return 'Modèles / Capacités';
+    if (cat == 'Alimentation / Épicerie' || cat == 'Santé') return 'Poids / Contenance';
+    if (cat == 'Immobilier') return 'Types / Surfaces';
+    if (cat == 'Services') return 'Durées / Formules';
+    return 'Déclinaisons / Modèles';
+  }
+
+  String _getCombinedCondition() {
+    if (_variants.isNotEmpty) {
+      Set<String> conditions = {};
+      for (var v in _variants) {
+        String t = v['title'].toString();
+        if (t.contains('Neuf')) conditions.add('Neuf');
+        if (t.contains('Occasion')) conditions.add('Occasion');
+        if (t.contains('Friperie')) conditions.add('Friperie');
+      }
+      if (conditions.isNotEmpty) return conditions.join(' & ');
+    }
+    return _specifications['État']?.toString() ?? 'Non spécifié';
+  }
+
+  Widget _buildSpecificationsGrid(Color textColor, bool isDark) {
+    // Exclude fields we already handled manually
+    List<String> excludedKeys = ['État', 'Couleurs', 'Villes disponibles', 'Paiement par prêt', 'Première avance', 'Montant de versement', 'Fréquence de versement', 'Autres informations', 'shipping_unit', 'shipping_value', 'Taille', 'Poids/Volume', 'Mémoire/Stockage'];
+    
+    Map<String, dynamic> dynamicSpecs = {};
+    _specifications.forEach((key, value) {
+       if (!excludedKeys.contains(key) && value != null && value.toString().trim().isNotEmpty) {
+          dynamicSpecs[key] = value;
+       }
+    });
+
+    if (dynamicSpecs.isEmpty) return const SizedBox();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Caractéristiques', style: TextStyle(color: textColor, fontSize: 16, fontWeight: FontWeight.w800)),
+        const SizedBox(height: 12),
+        Wrap(
+          spacing: 12, runSpacing: 12,
+          children: dynamicSpecs.entries.map((e) {
+            return Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              decoration: BoxDecoration(
+                color: isDark ? Colors.white.withValues(alpha: 0.05) : Colors.black.withValues(alpha: 0.03),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: AppColors.violet.withValues(alpha: 0.1)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(e.key.toUpperCase(), style: const TextStyle(color: AppColors.violet, fontSize: 10, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 4),
+                  Text(e.value.toString(), style: TextStyle(color: textColor, fontWeight: FontWeight.bold, fontSize: 13)),
+                ],
+              ),
+            );
+          }).toList(),
+        ),
+        const SizedBox(height: 24),
+      ],
+    );
+  }
+
   Widget _buildVariantOption(int index, String label, bool isDark) {
     final isSelected = _selectedVariant == index;
     return GestureDetector(
@@ -491,7 +659,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
           border: Border.all(color: isSelected ? const Color(0xFF6C4EF6) : Colors.grey.withValues(alpha: 0.3)),
         ),
         child: Text(
-          label,
+          label.split(' - ').first.replaceAll('Taille: ', '').replaceAll('Capacité: ', '').trim(),
           style: TextStyle(
             color: isSelected ? Colors.white : (isDark ? Colors.white70 : Colors.black87),
             fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
@@ -512,12 +680,92 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
         decoration: BoxDecoration(
           color: color,
           shape: BoxShape.circle,
-          border: Border.all(color: isSelected ? const Color(0xFF6C4EF6) : Colors.transparent, width: 3),
+          border: Border.all(color: isSelected ? const Color(0xFF6C4EF6) : Colors.grey.withValues(alpha: 0.3), width: isSelected ? 3 : 1),
           boxShadow: [
             if (isSelected) BoxShadow(color: const Color(0xFF6C4EF6).withValues(alpha: 0.4), blurRadius: 10)
           ],
         ),
       ),
+    );
+  }
+
+  Color _parseColor(dynamic colorValue) {
+    if (colorValue == null) return Colors.transparent;
+    try {
+      String hexStr = colorValue.toString().replaceAll('#', '');
+      if (hexStr.length == 6) hexStr = 'FF$hexStr';
+      if (hexStr.length == 8) {
+        return Color(int.parse(hexStr, radix: 16));
+      }
+    } catch (_) {}
+    return Colors.grey;
+  }
+
+  Widget _buildLogisticsSection(bool isDark, Color textColor, Color hintColor) {
+    final cart = context.watch<CartProvider>();
+    final matrix = cart.logisticsSettings;
+    final countries = matrix.keys.toList();
+    if (countries.isEmpty) {
+        return Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(color: Colors.orange.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(16)),
+          child: const Text('Modes de livraison en cours de configuration par l\'admin...', style: TextStyle(color: Colors.orange, fontSize: 12)),
+        );
+    }
+    
+    if (!countries.contains(_selectedDestination)) _selectedDestination = countries.first;
+
+    final origin = widget.product.origin.contains('Local') ? 'Local' : 'International';
+    final options = matrix[_selectedDestination]?[origin] ?? {};
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        GlassContainer(
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          child: DropdownButtonHideUnderline(
+            child: DropdownButton<String>(
+              value: _selectedDestination,
+              isExpanded: true,
+              dropdownColor: isDark ? const Color(0xFF1E1E2C) : Colors.white,
+              items: countries.map((c) => DropdownMenuItem(value: c, child: Text('Livrer vers : $c', style: TextStyle(color: textColor, fontWeight: FontWeight.bold, fontSize: 13)))).toList(),
+              onChanged: (val) => setState(() => _selectedDestination = val!),
+            ),
+          ),
+        ),
+        const SizedBox(height: 12),
+        if (options.isEmpty)
+           const Text('Aucun service disponible pour cette destination.', style: TextStyle(color: Colors.redAccent, fontSize: 12))
+        else
+           ...options.entries.map((entry) {
+              final data = entry.value;
+              return Container(
+                margin: const EdgeInsets.only(bottom: 8),
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: isDark ? Colors.white.withValues(alpha: 0.05) : Colors.black.withValues(alpha: 0.03),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: AppColors.violet.withValues(alpha: 0.1)),
+                ),
+                child: Row(
+                  children: [
+                    Icon(entry.key.contains('avion') ? Icons.flight : (entry.key.contains('maritime') ? Icons.directions_boat : Icons.local_shipping), color: AppColors.violet, size: 18),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(data['label'] ?? entry.key, style: TextStyle(color: textColor, fontWeight: FontWeight.bold, fontSize: 13)),
+                          Text('Délai : ${data['time']} ${data['time_unit']}', style: TextStyle(color: hintColor, fontSize: 11)),
+                        ],
+                      ),
+                    ),
+                    Text('${data['price']} F / ${data['unit']}', style: TextStyle(color: textColor, fontWeight: FontWeight.w900, fontSize: 12)),
+                  ],
+                ),
+              );
+           }),
+      ],
     );
   }
 

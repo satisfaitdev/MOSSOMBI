@@ -17,6 +17,8 @@ class AgencySettingsScreen extends ConsumerStatefulWidget {
 }
 
 class _AgencySettingsScreenState extends ConsumerState<AgencySettingsScreen> {
+  bool _useInternalDriversOnly = false;
+
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<AgencyProvider>();
@@ -73,6 +75,25 @@ class _AgencySettingsScreenState extends ConsumerState<AgencySettingsScreen> {
                           _buildActionTile('Gérer les Rôles', 'Modifier les permissions', Icons.admin_panel_settings_rounded, isDark, onTap: () {
                             context.push('/agency-team');
                           }),
+                          SwitchListTile(
+                            value: _useInternalDriversOnly,
+                            onChanged: (val) {
+                              setState(() {
+                                _useInternalDriversOnly = val;
+                              });
+                            },
+                            title: Text('Flotte Interne Uniquement', style: TextStyle(color: isDark ? Colors.white : Colors.black, fontWeight: FontWeight.bold, fontSize: 14)),
+                            subtitle: const Text('N\'utiliser que vos propres employés comme livreurs.', style: TextStyle(fontSize: 12, color: Colors.grey)),
+                            secondary: Container(
+                              padding: const EdgeInsets.all(10),
+                              decoration: BoxDecoration(
+                                color: isDark ? Colors.white.withValues(alpha: 0.1) : Colors.black.withValues(alpha: 0.05),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: const Icon(Icons.delivery_dining_rounded, color: Color(0xFF6C4EF6), size: 20),
+                            ),
+                            activeColor: const Color(0xFF6C4EF6),
+                          ),
                           _buildActionTile('Services Approuvés', 'Demander un nouveau service', Icons.category_rounded, isDark, onTap: () {
                             _showServicesBottomSheet(context, isDark);
                           }),

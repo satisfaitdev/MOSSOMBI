@@ -115,7 +115,15 @@ class AgencyProvider extends ChangeNotifier {
 
   /// Create a new Agency entirely
   /// Hits `POST /api/v1/agencies/apply`
-  Future<bool> createAgency(String name, String phone, String address, String type, String logoUrl) async {
+  Future<bool> createAgency({
+    required String name,
+    required String phone,
+    required String city,
+    required String address,
+    required String type,
+    String logoUrl = '',
+    List<Map<String, String>> documents = const [],
+  }) async {
      _isLoading = true;
      _error = null;
      notifyListeners();
@@ -123,7 +131,7 @@ class AgencyProvider extends ChangeNotifier {
      try {
        final response = await _apiClient.dio.post('/agencies/apply', data: {
           'name': name,
-          'city': 'Libreville', // default fallback
+          'city': city,
           'address': address,
           'logo_url': logoUrl,
           'services': [
@@ -131,7 +139,8 @@ class AgencyProvider extends ChangeNotifier {
                 'service_id': type,
                 'payload_json': {},
              }
-          ]
+          ],
+          'documents': documents,
        });
 
        if (response.statusCode == 201 && response.data['success'] == true) {

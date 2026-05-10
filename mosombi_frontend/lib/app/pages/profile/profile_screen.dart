@@ -157,7 +157,7 @@ class ProfileScreen extends ConsumerWidget {
 
                   final updatedProvider = context.read<AgencyProvider>();
                   final hasPending = updatedProvider.currentAgency?.status == 'pending' || updatedProvider.currentAgent?.status == 'pending';
-                  final isManager = ['owner', 'sub_agent'].contains(updatedProvider.roleInAgency);
+                  final isManager = ['owner', 'sub_agent', 'admin', 'manager'].contains(updatedProvider.roleInAgency);
                   
                   if (hasPending) {
                     context.push('/create-agency');

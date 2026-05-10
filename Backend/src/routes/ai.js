@@ -94,4 +94,70 @@ router.post('/enhance', async (req, res, next) => {
   }
 });
 
+/**
+ * @route POST /api/v1/ai/estimate-shipping
+ * @desc Estime le poids (kg) et le volume (cbm) d'un produit selon son nom et description.
+ */
+router.post('/estimate-shipping', async (req, res, next) => {
+  try {
+    const { name, description } = req.body;
+    if (!name) {
+      return res.status(400).json({ success: false, error: "Le nom du produit est requis" });
+    }
+
+    const prompt = `Tu es un expert en logistique. Estime le poids en kilogrammes (kg) et le volume en mètres cubes (CBM) pour ce produit à expédier.
+Nom: ${name}
+Description: ${description || 'N/A'}
+
+Réponds UNIQUEMENT au format JSON strict avec des nombres :
+{"weight_kg": valeur_numerique, "volume_cbm": valeur_numerique}`;
+
+    const geminiToken = process.env.GEMINI_API_KEY;
+    
+    if (geminiToken) {
+      try {
+        const response = await axios.post(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiToken}`, {
+          contents: [{ role: "user", parts: [{ text: prompt }] }],
+          generationConfig: { responseMimeType: "application/json" }
+        });
+        
+        const text = response.data?.candidates?.[0]?.content?.parts?.[0]?.text;
+        if (text) {
+          const parsed = JSON.parse(text);
+          return res.json({ success: true, data: parsed, aiUsed: true });
+        }
+      } catch (err) {
+        logger.error(`Erreur AI Shipping: ${err.message}`);
+        // Fallback to mock
+      }
+    }
+
+    // Fallback Mock response
+    let weight_kg = 1.0;
+    let volume_cbm = 0.01;
+    const lowerName = name.toLowerCase();
+    if (lowerName.includes('téléphone') || lowerName.includes('phone') || lowerName.includes('smartphone')) {
+      weight_kg = 0.3; volume_cbm = 0.001;
+    } else if (lowerName.includes('ordinateur') || lowerName.includes('laptop') || lowerName.includes('macbook')) {
+      weight_kg = 2.5; volume_cbm = 0.015;
+    } else if (lowerName.includes('chaussure') || lowerName.includes('basket')) {
+      weight_kg = 1.2; volume_cbm = 0.005;
+    } else if (lowerName.includes('t-shirt') || lowerName.includes('chemise') || lowerName.includes('vêtement')) {
+      weight_kg = 0.2; volume_cbm = 0.002;
+    } else if (lowerName.includes('frigo') || lowerName.includes('réfrigérateur')) {
+      weight_kg = 60.0; volume_cbm = 0.8;
+    }
+
+    return res.json({
+      success: true,
+      data: { weight_kg, volume_cbm },
+      aiUsed: false,
+      message: geminiToken ? "Fallback mock utilisé" : "Mode simulation (Pas de clé API)"
+    });
+
+  } catch (error) {
+    next(error);
+  }
+});
+
 export default router;

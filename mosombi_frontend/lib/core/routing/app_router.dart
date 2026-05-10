@@ -33,6 +33,10 @@ import 'package:mosombi_frontend/app/pages/agency/agency_onboarding_screen.dart'
 import 'package:mosombi_frontend/app/pages/agency/create_agency_screen.dart';
 import 'package:mosombi_frontend/app/pages/agency/join_agency_screen.dart';
 import 'package:mosombi_frontend/app/pages/agency/agency_settings_screen.dart';
+import 'package:mosombi_frontend/app/pages/orders/delivery_tracking_screen.dart';
+import 'package:mosombi_frontend/app/pages/orders/dispute_screen.dart';
+import 'package:mosombi_frontend/app/pages/delivery/driver_requests_screen.dart';
+import 'package:mosombi_frontend/app/pages/delivery/driver_active_delivery_screen.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import 'package:mosombi_frontend/core/providers/product_provider.dart';
@@ -191,6 +195,31 @@ final appRouter = GoRouter(
         final products = Provider.of<ProductProvider>(context, listen: false).products;
         final product = products.firstWhere((p) => p.id == id, orElse: () => products.first);
         return ProductDetailsScreen(product: product);
+      },
+    ),
+    GoRoute(
+      path: '/orders/tracking',
+      builder: (context, state) {
+        final orderId = state.extra as String? ?? 'MSB-XXXX';
+        return DeliveryTrackingScreen(orderId: orderId);
+      },
+    ),
+    GoRoute(
+      path: '/orders/dispute',
+      builder: (context, state) {
+        final orderId = state.extra as String? ?? 'MSB-XXXX';
+        return DisputeScreen(orderId: orderId);
+      },
+    ),
+    GoRoute(
+      path: '/delivery/requests',
+      builder: (context, state) => const DriverRequestsScreen(),
+    ),
+    GoRoute(
+      path: '/delivery/active',
+      builder: (context, state) {
+        final deliveryId = state.extra as String? ?? 'REQ-XXXX';
+        return DriverActiveDeliveryScreen(deliveryId: deliveryId);
       },
     ),
   ],

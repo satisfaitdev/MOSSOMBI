@@ -13,6 +13,7 @@ import { rateLimitService } from '../services/rateLimitService.js';
 import { redisRateLimitService } from '../services/redisRateLimitService.js';
 import { alertService } from '../services/alertService.js';
 import { logger } from '../utils/logger.js';
+import { dbAdmin } from '../config/db.js';
 
 const router = express.Router();
 
@@ -332,6 +333,57 @@ router.get('/search-audit', authenticateToken, asyncHandler(async (req, res) => 
   res.json({
     success: true,
     data: results
+  });
+}));
+
+/**
+ * GET /api/v1/monitoring/logistics-settings
+ * Récupérer la matrice logistique complète
+ */
+router.get('/logistics-settings', asyncHandler(async (req, res) => {
+  const { data: setting, error } = await dbAdmin
+    .from('app_settings')
+    .select('*')
+    .eq('key', 'logistics_rates')
+    .single();
+
+  // Si pas encore de réglages, on peut renvoyer une structure par défaut
+  res.json({
+    success: true,
+    data: setting?.value || {}
+  });
+}));
+
+/**
+ * POST /api/v1/monitoring/logistics-settings
+ * Mettre à jour la matrice logistique (Admin uniquement)
+ */
+router.post('/logistics-settings', authenticateToken, asyncHandler(async (req, res) => {
+  // Vérification stricte du rôle admin
+  if (req.user.role !== 'admin' && req.user.role !== 'super_admin') {
+    return res.status(403).json({
+      success: false,
+      error: 'Accès refusé. Droits administrateur requis.'
+    });
+  }
+
+  const { data, error } = await dbAdmin
+    .from('app_settings')
+    .upsert({
+      key: 'logistics_rates',
+      value: req.body,
+      description: 'Matrice des tarifs de livraison par pays et mode (Avion/KG, Bateau/CBM, Local/Course)',
+      updated_at: new Date().toISOString()
+    })
+    .select('*')
+    .single();
+
+  if (error) throw new Error(error.message);
+
+  res.json({
+    success: true,
+    message: 'Réglages logistiques mis à jour',
+    data: data.value
   });
 }));
 

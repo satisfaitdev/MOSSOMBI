@@ -251,9 +251,9 @@ async function ensureAgenciesTables() {
       )
     `);
 
-  await safeQuery('ALTER TABLE public.agencies ADD COLUMN IF NOT EXISTS city text NOT NULL DEFAULT ""');
-  await safeQuery('ALTER TABLE public.agencies ADD COLUMN IF NOT EXISTS address text NOT NULL DEFAULT ""');
-  await safeQuery('ALTER TABLE public.agencies ADD COLUMN IF NOT EXISTS logo_url text NOT NULL DEFAULT ""');
+  await safeQuery("ALTER TABLE public.agencies ADD COLUMN IF NOT EXISTS city text NOT NULL DEFAULT ''");
+  await safeQuery("ALTER TABLE public.agencies ADD COLUMN IF NOT EXISTS address text NOT NULL DEFAULT ''");
+  await safeQuery("ALTER TABLE public.agencies ADD COLUMN IF NOT EXISTS logo_url text NOT NULL DEFAULT ''");
   await safeQuery('ALTER TABLE public.agencies ADD COLUMN IF NOT EXISTS owner_user_id uuid NULL');
   await safeQuery("ALTER TABLE public.agencies ADD COLUMN IF NOT EXISTS status text NOT NULL DEFAULT 'pending'");
   await safeQuery('ALTER TABLE public.agencies ADD COLUMN IF NOT EXISTS is_active boolean NOT NULL DEFAULT false');
@@ -408,6 +408,8 @@ async function ensureAgenciesTables() {
   await safeQuery('CREATE INDEX IF NOT EXISTS idx_agency_articles_agency ON public.agency_articles(agency_id)');
   await safeQuery('CREATE INDEX IF NOT EXISTS idx_agency_articles_status ON public.agency_articles(status)');
   await safeQuery("ALTER TABLE public.agency_articles ADD COLUMN IF NOT EXISTS image_url text NOT NULL DEFAULT ''");
+  await safeQuery("ALTER TABLE public.agency_articles ADD COLUMN IF NOT EXISTS shipping_unit text NOT NULL DEFAULT 'kg'");
+  await safeQuery("ALTER TABLE public.agency_articles ADD COLUMN IF NOT EXISTS shipping_value numeric NOT NULL DEFAULT 0");
 
   // Billetterie (Tickets)
   await safeQuery(`
@@ -575,6 +577,62 @@ async function ensureAdsTable() {
   }
 }
 
+async function ensureStoreLogisticsTables() {
+  const safeQuery = async (sql) => {
+    try {
+      await appDataSource.query(sql);
+    } catch (e) {
+      console.error('ensureStoreLogisticsTables query failed:', e.message);
+    }
+  };
+
+  // Paramètres globaux dynamiques (tarifs de livraison, etc.)
+  await safeQuery(`
+    CREATE TABLE IF NOT EXISTS public.app_settings (
+      key text PRIMARY KEY,
+      value jsonb NOT NULL DEFAULT '{}'::jsonb,
+      description text NOT NULL DEFAULT '',
+      updated_at timestamptz NOT NULL DEFAULT now()
+    )
+  `);
+
+  // Logistique de livraison Store
+  await safeQuery(`
+    CREATE TABLE IF NOT EXISTS public.deliveries (
+      id uuid PRIMARY KEY,
+      sale_id uuid NOT NULL,
+      driver_user_id uuid NULL,
+      status text NOT NULL DEFAULT 'pending_assignment',
+      pickup_lat numeric NULL,
+      pickup_lng numeric NULL,
+      dropoff_lat numeric NULL,
+      dropoff_lng numeric NULL,
+      tracking_history jsonb NOT NULL DEFAULT '[]'::jsonb,
+      created_at timestamptz NOT NULL DEFAULT now(),
+      updated_at timestamptz NOT NULL DEFAULT now()
+    )
+  `);
+  await safeQuery('CREATE INDEX IF NOT EXISTS idx_deliveries_sale ON public.deliveries(sale_id)');
+  await safeQuery('CREATE INDEX IF NOT EXISTS idx_deliveries_driver ON public.deliveries(driver_user_id)');
+  await safeQuery('CREATE INDEX IF NOT EXISTS idx_deliveries_status ON public.deliveries(status)');
+
+  // Litiges
+  await safeQuery(`
+    CREATE TABLE IF NOT EXISTS public.disputes (
+      id uuid PRIMARY KEY,
+      sale_id uuid NOT NULL,
+      complainant_user_id uuid NOT NULL,
+      reason text NOT NULL,
+      status text NOT NULL DEFAULT 'open',
+      admin_notes text NOT NULL DEFAULT '',
+      created_at timestamptz NOT NULL DEFAULT now(),
+      updated_at timestamptz NOT NULL DEFAULT now()
+    )
+  `);
+  await safeQuery('CREATE INDEX IF NOT EXISTS idx_disputes_sale ON public.disputes(sale_id)');
+  await safeQuery('CREATE INDEX IF NOT EXISTS idx_disputes_status ON public.disputes(status)');
+}
+
 export async function initDatabase() {
   if (appDataSource.isInitialized) return appDataSource;
   await appDataSource.initialize();
@@ -583,5 +641,6 @@ export async function initDatabase() {
   await ensureAdsTable();
   await ensureAgenciesTables();
   await ensureTaxiTables();
+  await ensureStoreLogisticsTables();
   return appDataSource;
 }

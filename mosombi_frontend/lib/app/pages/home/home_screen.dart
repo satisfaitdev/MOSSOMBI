@@ -186,7 +186,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with TickerProviderStat
                     SliverAppBar(
                       expandedHeight: 156,
                       floating: false,
-                      pinned: true,
+                      pinned: false,
                       backgroundColor: Colors.transparent,
                       elevation: 0,
                       systemOverlayStyle: SystemUiOverlayStyle(

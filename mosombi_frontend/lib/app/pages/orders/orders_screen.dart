@@ -2,6 +2,7 @@ import 'package:mosombi_frontend/core/theme/app_colors.dart';
 import 'package:mosombi_frontend/core/widgets/glass_container.dart';
 import 'package:mosombi_frontend/core/widgets/custom_app_bars.dart';
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 
 class OrdersScreen extends StatelessWidget {
@@ -72,9 +73,14 @@ class OrdersScreen extends StatelessWidget {
                   
                   return Padding(
                     padding: const EdgeInsets.only(bottom: 16),
-                    child: GlassContainer(
-                      padding: const EdgeInsets.all(16),
-                      child: Row(
+                    child: GestureDetector(
+                      onTap: () {
+                         // ID fictif pour l'exemple
+                         context.push('/orders/tracking', extra: 'MSB-ORD-${index}84X');
+                      },
+                      child: GlassContainer(
+                        padding: const EdgeInsets.all(16),
+                        child: Row(
                         children: [
                           Container(
                             width: 54,
@@ -132,6 +138,7 @@ class OrdersScreen extends StatelessWidget {
                         ],
                       ),
                     ).animate(delay: (100 * index).ms).fade().slideX(begin: 0.1, end: 0, curve: Curves.easeOut),
+                    ),
                   );
                 },
                 childCount: orders.length,

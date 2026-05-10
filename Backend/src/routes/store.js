@@ -23,7 +23,7 @@ router.get('/products', asyncHandler(async (req, res) => {
 
   let query = dbAdmin
     .from('agency_articles')
-    .select('id, agency_id, name, description, price, in_stock, country, delivery_time, status, created_at, image_url')
+    .select('id, agency_id, name, description, price, in_stock, country, delivery_time, status, created_at, image_url, shipping_unit, shipping_value, metadata')
     .eq('status', 'active')
     .order('created_at', { ascending: false })
     .range(value.offset, value.offset + value.limit - 1);
@@ -34,7 +34,40 @@ router.get('/products', asyncHandler(async (req, res) => {
   const { data, error: dbErr } = await query;
   if (dbErr) throw new ValidationError(`Erreur lors de la récupération des produits: ${String(dbErr.message || '')}`);
 
-  return res.json({ success: true, data: data || [] });
+  let finalData = data || [];
+
+  // Récupérer les noms d'agence et les lier aux produits
+  if (finalData.length > 0) {
+    const agencyIds = [...new Set(finalData.map(item => item.agency_id).filter(Boolean))];
+    if (agencyIds.length > 0) {
+      const { data: agenciesData } = await dbAdmin
+        .from('agencies')
+        .select('id, name, is_certified')
+        .in('id', agencyIds);
+      
+      if (agenciesData && agenciesData.length > 0) {
+        const agencyMap = {};
+        for (const ag of agenciesData) {
+          agencyMap[ag.id] = ag;
+        }
+        
+        finalData = finalData.map(item => {
+          if (item.agency_id && agencyMap[item.agency_id]) {
+            return {
+              ...item,
+              agencies: {
+                name: agencyMap[item.agency_id].name,
+                is_certified: agencyMap[item.agency_id].is_certified
+              }
+            };
+          }
+          return item;
+        });
+      }
+    }
+  }
+
+  return res.json({ success: true, data: finalData });
 }));
 
 const checkoutSchema = Joi.object({

@@ -37,28 +37,20 @@ class ProductProvider extends ChangeNotifier {
   Future<void> fetchProducts() async {
     try {
       final response = await _apiClient.dio.get('/store/products');
-      if (response.statusCode == 200 && response.data['success']) {
         final List data = response.data['data'] ?? [];
-        _products = data.map((json) => Product(
-          id: json['id'] ?? _uuid.v4(),
-          name: json['name'] ?? 'Inconnu',
-          description: json['description'] ?? '',
-          price: double.tryParse((json['price'] ?? 0).toString()) ?? 0.0,
-          stock: json['in_stock'] == true ? 100 : 0, // Fallback since actual quantity is not returned right now
-          imageUrl: (json['image_url'] != null && json['image_url'].toString().isNotEmpty) 
-              ? json['image_url'] 
-              : 'https://images.unsplash.com/photo-1553062407-98eeb64c6a62?auto=format&fit=crop&q=80&w=800',
-          category: 'Marketplace',
-          origin: json['country'] ?? 'Locale 📍',
-          deliveryTime: json['delivery_time'] ?? '1-3 Jours',
-          agencyId: json['agency_id'],
-        )).toList();
+        final List<Product> fetchedProducts = [];
         
-        /// Real backend data only now
+        for (var item in data) {
+          try {
+            fetchedProducts.add(Product.fromJson(item as Map<String, dynamic>));
+          } catch (e) {
+            debugPrint('Skipping corrupt product: $e');
+          }
+        }
         
+        _products = fetchedProducts;
         _saveToCache();
         notifyListeners();
-      }
     } catch (e) {
       debugPrint('Error fetching products: $e');
     }
@@ -158,7 +150,11 @@ class ProductProvider extends ChangeNotifier {
     required String agencyId,
     String? imageUrl,
     List<String>? galleryUrls,
+    String? videoUrl,
+    String? brand,
     String? deliveryTime,
+    String? shippingUnit,
+    double? shippingValue,
     Map<String, dynamic>? specifications,
     List<Map<String, dynamic>>? variants,
   }) async {
@@ -173,10 +169,14 @@ class ProductProvider extends ChangeNotifier {
         'in_stock': stock > 0,
         'stock_quantity': stock,
         'category': category,
+        'brand': brand ?? '',
         'origin': origin,
         'image_url': imageUrl ?? '',
         'gallery_urls': galleryUrls ?? [],
+        'video_url': videoUrl ?? '',
         'delivery_time': deliveryTime ?? '2-3 Jours',
+        'shipping_unit': shippingUnit ?? 'kg',
+        'shipping_value': shippingValue ?? 0,
         'specifications': specifications ?? {},
         'variants': variants ?? [],
       });
@@ -184,19 +184,23 @@ class ProductProvider extends ChangeNotifier {
       if (response.statusCode == 201 && response.data['success'] == true) {
         // Ajouter en local pour affichage immédiat
         final newProduct = Product(
-           id: response.data['data']['id'] ?? _uuid.v4(),
+           id: response.data['data']?['id'] ?? _uuid.v4(),
            name: name,
            description: description,
            price: price,
            stock: stock,
            imageUrl: imageUrl ?? '',
            galleryUrls: galleryUrls ?? [],
+           videoUrl: videoUrl,
            category: category,
+           brand: brand,
            origin: origin,
            deliveryTime: deliveryTime ?? '2-3 Jours',
            agencyId: agencyId,
            specifications: specifications ?? {},
            variants: variants ?? [],
+           shippingUnit: shippingUnit,
+           shippingValue: shippingValue,
         );
         _products.insert(0, newProduct);
         _saveToCache();
@@ -216,12 +220,16 @@ class ProductProvider extends ChangeNotifier {
            stock: stock,
            imageUrl: imageUrl ?? '',
            galleryUrls: galleryUrls ?? [],
+           videoUrl: videoUrl,
            category: category,
+           brand: brand,
            origin: origin,
            deliveryTime: deliveryTime ?? '2-3 Jours',
            agencyId: agencyId,
            specifications: specifications ?? {},
            variants: variants ?? [],
+           shippingUnit: shippingUnit,
+           shippingValue: shippingValue,
       );
       _products.insert(0, newProduct);
       _saveToCache();
@@ -240,7 +248,11 @@ class ProductProvider extends ChangeNotifier {
     required String origin,
     String? imageUrl,
     List<String>? galleryUrls,
+    String? videoUrl,
+    String? brand,
     String? deliveryTime,
+    String? shippingUnit,
+    double? shippingValue,
     Map<String, dynamic>? specifications,
     List<Map<String, dynamic>>? variants,
   }) async {
@@ -255,10 +267,14 @@ class ProductProvider extends ChangeNotifier {
         'in_stock': stock > 0,
         'stock_quantity': stock,
         'category': category,
+        'brand': brand ?? '',
         'origin': origin,
         'image_url': imageUrl ?? '',
         'gallery_urls': galleryUrls ?? [],
+        'video_url': videoUrl ?? '',
         'delivery_time': deliveryTime ?? '2-3 Jours',
+        'shipping_unit': shippingUnit ?? 'kg',
+        'shipping_value': shippingValue ?? 0,
         'specifications': specifications ?? {},
         'variants': variants ?? [],
       });
@@ -271,17 +287,21 @@ class ProductProvider extends ChangeNotifier {
            _products[index] = Product(
               id: productId,
               name: name,
-              description: description, // Le backend retourne la description concaténée, mais ici on garde la version simple pour éviter un double parsing au besoin (Optionnel)
+              description: description,
               price: price,
               stock: stock,
               imageUrl: (imageUrl != null && imageUrl.isNotEmpty) ? imageUrl : oldProduct.imageUrl,
               galleryUrls: galleryUrls ?? oldProduct.galleryUrls,
+              videoUrl: videoUrl ?? oldProduct.videoUrl,
               category: category,
+              brand: brand ?? oldProduct.brand,
               origin: origin,
               deliveryTime: deliveryTime ?? oldProduct.deliveryTime,
               agencyId: oldProduct.agencyId,
               specifications: specifications ?? oldProduct.specifications,
               variants: variants ?? oldProduct.variants,
+              shippingUnit: shippingUnit ?? oldProduct.shippingUnit,
+              shippingValue: shippingValue ?? oldProduct.shippingValue,
            );
            _saveToCache();
            notifyListeners();
@@ -304,12 +324,16 @@ class ProductProvider extends ChangeNotifier {
               stock: stock,
               imageUrl: (imageUrl != null && imageUrl.isNotEmpty) ? imageUrl : oldProduct.imageUrl,
               galleryUrls: galleryUrls ?? oldProduct.galleryUrls,
+              videoUrl: videoUrl ?? oldProduct.videoUrl,
               category: category,
+              brand: brand ?? oldProduct.brand,
               origin: origin,
               deliveryTime: deliveryTime ?? oldProduct.deliveryTime,
               agencyId: oldProduct.agencyId,
               specifications: specifications ?? oldProduct.specifications,
               variants: variants ?? oldProduct.variants,
+              shippingUnit: shippingUnit ?? oldProduct.shippingUnit,
+              shippingValue: shippingValue ?? oldProduct.shippingValue,
           );
           _saveToCache();
           notifyListeners();

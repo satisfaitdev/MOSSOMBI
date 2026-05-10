@@ -1,61 +1,46 @@
 import React from 'react';
 import Link from 'next/link';
 import LogoutButton from './LogoutButton';
+import SidebarNav from './SidebarNav';
 import { AuthUser } from '@/lib/auth';
-
-interface NavItemProps {
-    href: string;
-    label: string;
-    icon?: React.ReactNode;
-    isActive?: boolean;
-}
-
-const NavItem = ({ href, label, icon, isActive }: NavItemProps) => (
-    <Link
-        href={href}
-        className={`flex items-center gap-3 px-4 py-2.5 rounded-xl transition-all duration-200 group ${isActive
-            ? 'bg-blue-600/10 text-blue-500 font-medium border border-blue-600/20'
-            : 'text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800/50'
-            }`}
-    >
-        {icon && <span className="text-lg opacity-70 group-hover:opacity-100">{icon}</span>}
-        <span className="text-sm">{label}</span>
-    </Link>
-);
+import { Bell, Settings, Search } from 'lucide-react';
 
 export default function DashboardLayout({ children, user }: { children: React.ReactNode; user?: AuthUser }) {
     return (
-        <div className="flex min-h-screen bg-[#09090b] text-zinc-100">
-            {/* Sidebar */}
-            <aside className="fixed inset-y-0 left-0 w-64 glass border-r border-zinc-800/50 hidden md:flex flex-col z-50">
-                <div className="p-6">
+        <div className="flex min-h-screen bg-black text-zinc-100 selection:bg-blue-500/30 font-sans">
+            {/* Minimal Modern Sidebar */}
+            <aside className="fixed inset-y-4 left-4 w-64 glass rounded-3xl border border-zinc-800/50 hidden md:flex flex-col z-50 shadow-2xl">
+                <div className="p-6 pb-2">
                     <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center shadow-[0_0_15px_rgba(37,99,235,0.4)]">
-                            <span className="text-white font-bold text-xs">M</span>
+                        <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-blue-700 rounded-xl flex items-center justify-center shadow-[0_0_20px_rgba(37,99,235,0.4)]">
+                            <span className="text-white font-bold text-sm tracking-wider">M</span>
                         </div>
-                        <span className="font-semibold tracking-tight text-lg">Mossombi <span className="text-zinc-500 font-normal">Admin</span></span>
+                        <div>
+                            <h1 className="font-bold tracking-tight text-lg leading-tight">Mossombi</h1>
+                            <p className="text-[10px] text-zinc-500 uppercase tracking-[0.2em] font-semibold">Admin Panel</p>
+                        </div>
                     </div>
                 </div>
 
-                <nav className="flex-1 px-4 py-4 space-y-1">
-                    <NavItem href="/" label="Dashboard" icon="⊡" isActive />
-                    <NavItem href="/ads" label="Ads Architecture" icon="▤" />
-                    <div className="pt-6 pb-2 px-4 text-[10px] font-bold uppercase tracking-widest text-zinc-600">Modules</div>
-                    <NavItem href="/platform/agencies" label="Agences" icon="◇" />
-                    <NavItem href="/platform/commissions" label="Commissions" icon="%" />
-                    <NavItem href="#" label="Statistiques" icon="◬" />
-                </nav>
+                <div className="px-6 py-4">
+                    <div className="h-[1px] w-full bg-gradient-to-r from-zinc-800/0 via-zinc-800 to-zinc-800/0"></div>
+                </div>
 
-                <div className="p-4 border-t border-zinc-800/50">
-                    <div className="bg-zinc-900/50 rounded-2xl p-4 border border-zinc-800/50">
-                        <div className="flex items-center gap-3 mb-3">
-                            <div className="w-8 h-8 rounded-full bg-zinc-800 border border-zinc-700 flex items-center justify-center text-xs font-medium text-zinc-300">
+                <SidebarNav />
+
+                <div className="p-4 mt-auto">
+                    <div className="bg-black/40 rounded-2xl p-4 border border-zinc-800/50 backdrop-blur-md transition-all hover:border-zinc-700/50">
+                        <div className="flex items-center gap-3 mb-4">
+                            <div className="w-9 h-9 rounded-full bg-gradient-to-br from-zinc-800 to-zinc-900 border border-zinc-700 flex items-center justify-center text-sm font-bold text-zinc-200 shadow-inner">
                                 {user?.full_name?.charAt(0) || user?.email?.charAt(0) || 'A'}
                             </div>
-                            <div className="overflow-hidden">
-                                <p className="text-sm font-medium truncate">{user?.full_name || user?.email}</p>
-                                <p className="text-[10px] text-zinc-500 uppercase tracking-wider">{user?.role || 'Administrator'}</p>
+                            <div className="overflow-hidden flex-1">
+                                <p className="text-sm font-semibold truncate text-zinc-200">{user?.full_name || user?.email}</p>
+                                <p className="text-[10px] text-blue-400 uppercase tracking-wider font-medium">{user?.role || 'System Admin'}</p>
                             </div>
+                            <button className="text-zinc-500 hover:text-zinc-300 transition-colors">
+                                <Settings size={16} />
+                            </button>
                         </div>
                         <LogoutButton />
                     </div>
@@ -63,45 +48,42 @@ export default function DashboardLayout({ children, user }: { children: React.Re
             </aside>
 
             {/* Main Content */}
-            <main className="flex-1 md:ml-64 min-h-screen flex flex-col">
-                {/* Header */}
-                <header className="h-16 border-b border-zinc-800/50 glass sticky top-0 z-40 flex items-center justify-between px-8">
-                    <div className="flex items-center gap-2 text-xs text-zinc-500 uppercase tracking-widest">
-                        <span>Admin</span>
-                        <span>/</span>
-                        <span className="text-zinc-100">Overview</span>
+            <main className="flex-1 md:ml-[18rem] min-h-screen flex flex-col relative z-10">
+                {/* Modern Top Header */}
+                <header className="h-20 sticky top-0 z-40 flex items-center justify-between px-8 backdrop-blur-xl bg-black/40 border-b border-zinc-800/30">
+                    <div className="flex items-center gap-3 text-sm font-medium">
+                        <div className="px-3 py-1.5 rounded-lg bg-blue-500/10 text-blue-400 border border-blue-500/20 text-xs tracking-wider uppercase">
+                            Environment
+                        </div>
+                        <span className="text-zinc-600">/</span>
+                        <span className="text-zinc-200 tracking-wide">Production</span>
                     </div>
 
-                    <div className="flex items-center gap-4">
-                        <a
-                            href="/"
-                            className="px-4 py-2 rounded-xl bg-zinc-900/60 border border-zinc-800/50 text-xs font-bold uppercase tracking-widest text-zinc-400 hover:text-zinc-200 hover:border-zinc-700 transition-all"
-                        >
-                            Accueil
-                        </a>
-                        <a
-                            href="/platform/agencies"
-                            className="px-4 py-2 rounded-xl bg-zinc-900/60 border border-zinc-800/50 text-xs font-bold uppercase tracking-widest text-zinc-400 hover:text-zinc-200 hover:border-zinc-700 transition-all"
-                        >
-                            Agences
-                        </a>
-                        <a
-                            href="/platform/commissions"
-                            className="px-4 py-2 rounded-xl bg-zinc-900/60 border border-zinc-800/50 text-xs font-bold uppercase tracking-widest text-zinc-400 hover:text-zinc-200 hover:border-zinc-700 transition-all"
-                        >
-                            Commissions
-                        </a>
-                        <div className="w-8 h-8 rounded-full bg-zinc-900 border border-zinc-800 flex items-center justify-center text-zinc-400 hover:text-white cursor-pointer transition-colors">
-                            <span className="text-xs">🔔</span>
+                    <div className="flex items-center gap-6">
+                        <div className="relative group hidden lg:block">
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" size={16} />
+                            <input 
+                                type="text" 
+                                placeholder="Search anything... (⌘K)" 
+                                className="pl-10 pr-4 py-2 bg-zinc-900/50 border border-zinc-800 rounded-xl text-sm outline-none focus:border-blue-500/50 focus:bg-zinc-900 transition-all w-64 placeholder:text-zinc-600"
+                            />
+                        </div>
+                        <div className="w-[1px] h-6 bg-zinc-800"></div>
+                        <div className="relative group cursor-pointer">
+                            <div className="w-10 h-10 rounded-xl bg-zinc-900/80 border border-zinc-800 flex items-center justify-center text-zinc-400 group-hover:text-white group-hover:border-zinc-700 transition-all">
+                                <Bell size={18} />
+                            </div>
+                            <span className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full border-2 border-black"></span>
                         </div>
                     </div>
                 </header>
 
                 {/* Content Area */}
-                <div className="p-8 pb-16">
+                <div className="p-8 pb-20 max-w-[1600px] w-full mx-auto animate-in fade-in slide-in-from-bottom-4 duration-700 ease-out">
                     {children}
                 </div>
             </main>
         </div>
     );
 }
+

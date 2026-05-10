@@ -77,6 +77,36 @@ class CartScreen extends StatelessWidget {
                                     crossAxisAlignment: CrossAxisAlignment.start,
                                     children: [
                                       Text(item.product.name, style: TextStyle(color: textColor, fontWeight: FontWeight.bold, fontSize: 16), maxLines: 1, overflow: TextOverflow.ellipsis),
+                                      if (item.selectedVariant != null) ...[
+                                        const SizedBox(height: 2),
+                                        Text('Modèle/Taille: ${item.selectedVariant}', style: TextStyle(color: hintColor, fontSize: 12)),
+                                      ],
+                                      if (item.selectedColor != null) ...[
+                                        const SizedBox(height: 2),
+                                        Row(
+                                          children: [
+                                            Text('Couleur: ', style: TextStyle(color: hintColor, fontSize: 12)),
+                                            Container(
+                                              width: 12, height: 12,
+                                              decoration: BoxDecoration(
+                                                color: Color(int.parse(item.selectedColor!.replaceAll('#', '').length == 6 
+                                                  ? 'FF${item.selectedColor!.replaceAll('#', '')}' 
+                                                  : item.selectedColor!.replaceAll('#', ''), radix: 16)),
+                                                shape: BoxShape.circle,
+                                                border: Border.all(color: Colors.grey.withValues(alpha: 0.3)),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ],
+                                      if (item.wantsLoan) ...[
+                                        const SizedBox(height: 2),
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                          decoration: BoxDecoration(color: AppColors.violet.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(4)),
+                                          child: const Text('Achat à crédit (Prêt)', style: TextStyle(color: AppColors.violet, fontSize: 10, fontWeight: FontWeight.bold)),
+                                        ),
+                                      ],
                                       const SizedBox(height: 4),
                                       Text('${item.product.price.toStringAsFixed(0)} FCFA', style: const TextStyle(color: Color(0xFF00E5C5), fontWeight: FontWeight.bold)),
                                       const SizedBox(height: 8),
@@ -94,7 +124,7 @@ class CartScreen extends StatelessWidget {
                                           Text('${item.quantity}', style: TextStyle(color: textColor, fontWeight: FontWeight.bold, fontSize: 16)),
                                           const SizedBox(width: 12),
                                           InkWell(
-                                            onTap: () => cart.addItem(item.product),
+                                            onTap: () => cart.addItem(item.product, selectedVariant: item.selectedVariant, selectedColor: item.selectedColor, wantsLoan: item.wantsLoan),
                                             child: Container(
                                               padding: const EdgeInsets.all(4),
                                               decoration: BoxDecoration(color: const Color(0xFF6C4EF6), borderRadius: BorderRadius.circular(8)),

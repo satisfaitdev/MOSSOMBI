@@ -44,6 +44,8 @@ import storeEnhancedRoutes from './routes/store-enhanced.js';
 import liveLocationsRoutes from './routes/liveLocations.js';
 import taxiRidesRoutes from './routes/taxiRides.js';
 import aiRoutes from './routes/ai.js';
+import deliveriesRoutes from './routes/deliveries.js';
+import disputesRoutes from './routes/disputes.js';
 
 import { initRealtimeSocket } from './realtime/socket.js';
 
@@ -69,10 +71,23 @@ app.use(helmet({
   crossOriginResourcePolicy: { policy: "cross-origin" }
 }));
 
-// CORS pour les requêtes cross-origin
+// CORS pour les requêtes cross-origin (restreint aux origines configurées)
+const allowedOrigins = (process.env.CORS_ORIGIN || 'http://localhost:8081')
+  .split(',')
+  .map(o => o.trim())
+  .filter(Boolean);
+
 app.use(cors({
   origin: function (origin, callback) {
-    callback(null, true);
+    // Autorise les requêtes sans origin (apps mobiles, curl, Postman)
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.includes(origin)) return callback(null, true);
+    // En développement, on peut aussi autoriser localhost
+    if (process.env.NODE_ENV === 'development' && /^http:\/\/localhost:/.test(origin)) {
+      return callback(null, true);
+    }
+    logger.warn(`CORS blocked origin: ${origin}`);
+    callback(new Error('CORS policy: Origin not allowed'));
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
@@ -170,6 +185,8 @@ app.use(`/api/${API_VERSION}/store`, storeRoutes);
 app.use(`/api/${API_VERSION}/store-enhanced`, storeEnhancedRoutes);
 app.use(`/api/${API_VERSION}/taxi`, taxiRidesRoutes);
 app.use(`/api/${API_VERSION}/ai`, aiRoutes);
+app.use(`/api/${API_VERSION}/deliveries`, deliveriesRoutes);
+app.use(`/api/${API_VERSION}/disputes`, disputesRoutes);
 
 // =====================================================
 // 🚫 GESTION DES ERREURS
