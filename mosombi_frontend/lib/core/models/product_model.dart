@@ -130,7 +130,12 @@ class Product {
         description: json['description']?.toString() ?? '',
         price: _parseDouble(json['price']),
         stock: _parseInt(json['stock'] ?? metadata['stock_management']?['quantity']),
-        imageUrl: json['imageUrl']?.toString() ?? (json['image_url']?.toString() ?? ''),
+        imageUrl: () {
+          final directUrl = json['imageUrl']?.toString() ?? json['image_url']?.toString() ?? '';
+          if (directUrl.isNotEmpty) return directUrl;
+          if (gallery.isNotEmpty) return gallery.first;
+          return '';
+        }(),
         galleryUrls: gallery,
         videoUrl: metadata['media']?['video']?.toString(),
         category: json['category']?.toString() ?? 

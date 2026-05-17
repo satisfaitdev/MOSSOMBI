@@ -4,6 +4,7 @@ import crypto from 'crypto';
 import { dbAdmin } from '../config/db.js';
 import { asyncHandler, ValidationError } from '../middleware/errorHandler.js';
 import { authenticateToken } from '../middleware/auth.js';
+import { saveBase64File } from '../utils/fileStorage.js';
 
 const router = express.Router();
 
@@ -34,15 +35,23 @@ const checkoutSchema = Joi.object({
     Joi.object({
       article_id: Joi.string().guid({ version: 'uuidv4' }).required(),
       quantity: Joi.number().integer().min(1).max(100).default(1),
-      variant_id: Joi.string().guid({ version: 'uuidv4' }).optional(),
+      selected_variant: Joi.string().allow('').optional(),
+      selected_color: Joi.string().allow('').optional(),
+      wants_loan: Joi.boolean().optional(),
     })
   ).min(1).required(),
   client_name: Joi.string().allow('').max(200).optional(),
   client_phone: Joi.string().allow('').max(32).optional(),
   delivery_address: Joi.string().allow('').max(500).optional(),
-  delivery_method: Joi.string().valid('pickup', 'local_instant', 'local_standard', 'intl_avion', 'intl_bateau').default('local_standard'),
-  payment_method: Joi.string().valid('credit_card', 'mobile_money', 'cash', 'bank_transfer', 'crypto').required(),
+  delivery_method: Joi.string().valid(
+    'pickup', 'local_instant', 'local_standard', 'intl_avion', 'intl_bateau',
+    'local_normal', 'local_express', 'intl_maritime', 'intl_avion_normal', 'intl_avion_express'
+  ).default('local_standard'),
+  payment_method: Joi.string().valid('credit_card', 'mobile_money', 'cash', 'bank_transfer', 'crypto', 'wallet', 'credit_application', 'cash_on_delivery').required(),
+  voice_note: Joi.string().allow('', null).optional(),
   notes: Joi.string().allow('').max(500).optional(),
+  latitude: Joi.number().allow(null).optional(),
+  longitude: Joi.number().allow(null).optional(),
 });
 
 // 🚀 GET /api/v1/store-enhanced/products - Recherche avancée
@@ -329,7 +338,19 @@ router.post('/checkout', authenticateToken, asyncHandler(async (req, res) => {
       throw new ValidationError(`Stock insuffisant pour: ${art.name}`);
     }
 
-    const unit = Number(art.price || 0);
+    let unit = Number(art.price || 0);
+    
+    // 🔥 PRIX SPÉCIFIQUE PAR VARIANTE
+    if (item.selected_variant && metadata.attributes?.variants) {
+      const variant = metadata.attributes.variants.find(v => {
+        const title = v.title || '';
+        return title === item.selected_variant || title.includes(item.selected_variant);
+      });
+      if (variant && variant.price) {
+        unit = Number(variant.price);
+      }
+    }
+
     const qty = Number(item.quantity || 1);
     const amount = unit * qty;
     
@@ -390,7 +411,10 @@ router.post('/checkout', authenticateToken, asyncHandler(async (req, res) => {
         article_metadata: {
           category: metadata.category || {},
           attributes: metadata.attributes || {},
-          media: metadata.media || {}
+          media: metadata.media || {},
+          selected_variant: item.selected_variant,
+          selected_color: item.selected_color,
+          wants_loan: item.wants_loan || false
         }
       },
       created_at: now,
@@ -410,14 +434,29 @@ router.post('/checkout', authenticateToken, asyncHandler(async (req, res) => {
 
   // Create deliveries for items requiring it
   if (value.delivery_method !== 'pickup') {
-    const deliveryRows = (sales || []).map(sale => ({
-      id: crypto.randomUUID(),
-      sale_id: sale.id,
-      status: 'pending_assignment',
-      tracking_history: [{ status: 'pending_assignment', timestamp: now }],
-      created_at: now,
-      updated_at: now
-    }));
+    // Get agencies locations for pickup
+    const agencyIds = [...new Set(articles.map(a => a.agency_id))];
+    const { data: agencies } = await dbAdmin.from('agencies').select('id, latitude, longitude').in('id', agencyIds);
+    const agencyLocs = new Map((agencies || []).map(a => [String(a.id), a]));
+
+    const voiceNoteUrl = value.voice_note ? saveBase64File(value.voice_note, 'voice_notes') : null;
+
+    const deliveryRows = (sales || []).map(sale => {
+      const agency = agencyLocs.get(String(sale.agency_id));
+      return {
+        id: crypto.randomUUID(),
+        sale_id: sale.id,
+        status: 'pending_assignment',
+        pickup_lat: agency?.latitude || null,
+        pickup_lng: agency?.longitude || null,
+        dropoff_lat: value.latitude || null,
+        dropoff_lng: value.longitude || null,
+        voice_note_url: voiceNoteUrl,
+        tracking_history: [{ status: 'pending_assignment', timestamp: now }],
+        created_at: now,
+        updated_at: now
+      };
+    });
     if (deliveryRows.length > 0) {
       await dbAdmin.from('deliveries').insert(deliveryRows);
     }

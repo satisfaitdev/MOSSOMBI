@@ -56,22 +56,6 @@ services:
     env_file:
       - .env.docker
 
-  # Service admin pour le développement local uniquement
-  admin:
-    image: node:24-slim
-    container_name: mossombi-admin
-    working_dir: /usr/src/app
-    volumes:
-      - ../admin:/usr/src/app
-      - /usr/src/app/node_modules
-    ports:
-      - "3001:3000"
-    command: sh -c "npm install && npm run dev"
-    depends_on:
-      - backend
-    env_file:
-      - ../admin/.env
-
 volumes:
   mossombi_pgdata:
   mossombi_redisdata:

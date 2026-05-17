@@ -91,15 +91,23 @@ class MossombiSliverAppBar extends StatelessWidget {
           const SizedBox(width: 8),
         ],
       ],
-      flexibleSpace: FlexibleSpaceBar(
-        centerTitle: true,
-        titlePadding: const EdgeInsets.only(bottom: 16),
-        title: Text(title, style: TextStyle(
-              color: textColor,
-              fontWeight: FontWeight.w900,
-              letterSpacing: -0.5,
-            )),
-            background: background,
+      flexibleSpace: ClipRect(
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+          child: Container(
+            color: isDark ? Colors.black.withValues(alpha: 0.4) : Colors.white.withValues(alpha: 0.4),
+            child: FlexibleSpaceBar(
+              centerTitle: true,
+              titlePadding: const EdgeInsets.only(bottom: 16),
+              title: Text(title, style: TextStyle(
+                color: textColor,
+                fontWeight: FontWeight.w900,
+                letterSpacing: -0.5,
+              )),
+              background: background,
+            ),
+          ),
+        ),
       ),
     );
   }

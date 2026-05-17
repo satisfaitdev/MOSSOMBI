@@ -24,16 +24,17 @@ mossombi/
 │   ├── docs/               # Documentation complète
 │   ├── tests/              # Tests automatisés
 │   └── README.md           # Guide backend
-├── Frontend client/        # Application mobile React Native
+├── mosombi_frontend/       # Application mobile Flutter
+│   ├── lib/                # Code source Dart
+│   ├── android/            # Configuration Android
+│   ├── ios/                # Configuration iOS
+│   └── README.md           # Guide frontend
+├── admin/                  # Dashboard Admin (Next.js)
 │   ├── src/
-│   │   ├── components/     # Composants UI réutilisables
-│   │   ├── screens/       # Écrans de l'application
-│   │   ├── services/      # Services API
-│   │   └── utils/         # Utilitaires
-│   ├── assets/            # Images et ressources
-│   └── README.md          # Guide frontend
-├── Smsserveur/            # Serveur SMS local
-└── docs/                  # Documentation projet
+│   │   ├── app/            # Pages & routes
+│   │   └── components/     # Composants UI
+│   └── README.md           # Guide admin
+└── docs/                   # Documentation projet
 ```
 
 ## 🛠️ Technologies
@@ -46,12 +47,20 @@ mossombi/
 - **Sécurité** : OWASP compliant
 - **Architecture** : Modulaire (23 modules <500 lignes)
 
-### Frontend
-- **Framework** : React Native
-- **Navigation** : React Navigation
-- **State Management** : Context API
-- **UI Components** : Composants personnalisés
-- **Testing** : Jest + React Native Testing Library
+### Frontend Mobile
+- **Framework** : Flutter 3.x
+- **State Management** : Riverpod + Provider
+- **Routing** : GoRouter
+- **DI** : GetIt + Injectable
+- **Local Storage** : Hive + SecureStorage
+- **HTTP** : Dio
+- **UI** : Material Design + Google Fonts
+- **Testing** : flutter_test + flutter_lints
+
+### Panel Admin
+- **Framework** : Next.js 16 (App Router)
+- **Styling** : Tailwind CSS v4
+- **Language** : TypeScript
 
 ### Infrastructure
 - **Database** : PostgreSQL
@@ -94,15 +103,13 @@ mossombi/
 ### Prérequis
 
 - Node.js 18+
-- PostgreSQL 15+
+- PostgreSQL 15+ (ou Docker)
 - Redis (optionnel)
-- React Native CLI
+- Flutter 3.x + Dart SDK
 
 ### Installation Backend
 
 ```bash
-# Cloner le projet
-git clone <repository-url>
 cd mossombi/Backend
 
 # Installer les dépendances
@@ -110,10 +117,10 @@ npm install
 
 # Configurer l'environnement
 cp .env.example .env
-# Éditer .env avec vos configurations
+# Éditer .env avec vos configurations (ne jamais committer .env !)
 
-# Démarrer la base de données
-docker-compose up -d postgres
+# Démarrer la base de données et Redis
+docker-compose up -d postgres redis
 
 # Exécuter les migrations
 npm run migrate
@@ -122,21 +129,32 @@ npm run migrate
 npm run dev
 ```
 
-### Installation Frontend
+### Installation Frontend Mobile (Flutter)
 
 ```bash
-# Naviguer vers le frontend
-cd ../"Frontend client"
+cd ../mosombi_frontend
 
 # Installer les dépendances
-npm install
+flutter pub get
 
 # Configurer l'environnement
 cp .env.example .env
 # Éditer .env avec l'URL du backend
 
-# Démarrer l'application
-npm start
+# Lancer l'application
+flutter run
+```
+
+### Installation Panel Admin
+
+```bash
+cd ../admin
+
+# Installer les dépendances
+npm install
+
+# Démarrer en mode développement
+npm run dev
 ```
 
 ## 📚 Documentation
@@ -148,10 +166,11 @@ npm start
 - [Guide de Testing](./Backend/docs/testing.md)
 - [Schéma Base de Données](./Backend/docs/database-schema.md)
 
-### Frontend
-- [Guide de Développement](./"Frontend client"/README.md)
-- [Composants UI](./"Frontend client"/components/README.md)
-- [Navigation](./"Frontend client"/docs/navigation.md)
+### Frontend Mobile
+- [Guide Flutter](./mosombi_frontend/README.md)
+
+### Panel Admin
+- [Guide Admin](./admin/README.md)
 
 ## 🧪 Tests
 
@@ -222,24 +241,27 @@ SMS_API_KEY=your_sms_key
 ### Développement
 
 ```bash
-# Backend
+# Backend API
 cd Backend && npm run dev
 
-# Frontend
-cd "Frontend client" && npm start
+# Panel Admin
+cd admin && npm run dev
+
+# Application Mobile (Flutter)
+cd mosombi_frontend && flutter run
 ```
 
 ### Production
 
 ```bash
 # Build backend
-cd Backend && npm run build
+cd Backend && npm start
 
-# Build frontend
-cd "Frontend client" && npm run build
+# Build admin
+cd admin && npm run build && npm start
 
-# Deploy avec Docker
-docker-compose up -d
+# Deploy avec Docker Compose (Backend + DB + Redis)
+cd Backend && docker-compose up -d
 ```
 
 ## 🤝 Contribuer

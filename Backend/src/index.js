@@ -46,6 +46,7 @@ import taxiRidesRoutes from './routes/taxiRides.js';
 import aiRoutes from './routes/ai.js';
 import deliveriesRoutes from './routes/deliveries.js';
 import disputesRoutes from './routes/disputes.js';
+import logisticsZonesRoutes from './routes/logistics-zones.js';
 
 import { initRealtimeSocket } from './realtime/socket.js';
 
@@ -142,6 +143,9 @@ app.use(morgan('combined', {
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
+// Serving static files from the uploads directory
+app.use('/uploads', express.static('uploads'));
+
 // =====================================================
 // 📊 ROUTE DE SANTÉ (DOUBLON SUPPRIMÉ)
 // =====================================================
@@ -187,6 +191,7 @@ app.use(`/api/${API_VERSION}/taxi`, taxiRidesRoutes);
 app.use(`/api/${API_VERSION}/ai`, aiRoutes);
 app.use(`/api/${API_VERSION}/deliveries`, deliveriesRoutes);
 app.use(`/api/${API_VERSION}/disputes`, disputesRoutes);
+app.use(`/api/${API_VERSION}/logistics-zones`, logisticsZonesRoutes);
 
 // =====================================================
 // 🚫 GESTION DES ERREURS

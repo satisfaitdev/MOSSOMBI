@@ -269,6 +269,11 @@ class DbQuery {
     return this;
   }
 
+  upsert(values, options = {}) {
+    this._pendingWrite = { type: 'upsert', values, options };
+    return this;
+  }
+
   async _executeWrite({ returning = false, single = false } = {}) {
     await this._ensureDb();
     try {
@@ -312,7 +317,25 @@ class DbQuery {
         return { data: returning ? result.raw : null, error: null };
       }
 
-      return { data: null, error: { message: 'Unsupported write type' } };
+      if (w.type === 'upsert') {
+        const qb = appDataSource.createQueryBuilder()
+          .insert()
+          .into(this.table)
+          .values(w.values)
+          .orUpdate(
+            Object.keys(w.values).filter(k => k !== 'key' && k !== 'id'), 
+            w.options?.onConflict || ['key']
+          );
+        
+        if (returning) qb.returning('*');
+        const result = await qb.execute();
+        const rows = result.raw || [];
+        const data = returning ? rows : null;
+        if (single && Array.isArray(data)) {
+          return { data: data[0] ?? null, error: null };
+        }
+        return { data, error: null };
+      }
     } catch (e) {
       return { data: null, error: { message: e.message } };
     }

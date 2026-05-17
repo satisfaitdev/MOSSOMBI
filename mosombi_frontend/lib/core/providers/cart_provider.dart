@@ -26,7 +26,7 @@ class CartProvider extends ChangeNotifier {
   Map<String, List<CartItem>> get itemsByOrigin {
     final groups = <String, List<CartItem>>{};
     for (var item in _items.values) {
-      final origin = item.product.origin.contains('Local') ? 'Local' : 'International';
+      final origin = (item.product.origin ?? 'Local').contains('Local') ? 'Local' : 'International';
       if (!groups.containsKey(origin)) groups[origin] = [];
       groups[origin]!.add(item);
     }
@@ -42,7 +42,7 @@ class CartProvider extends ChangeNotifier {
 
      for (var item in _items.values) {
         final payKey = item.wantsLoan ? 'loan' : 'cash';
-        final originKey = item.product.origin.contains('Local') ? 'Local' : 'International';
+        final originKey = (item.product.origin ?? 'Local').contains('Local') ? 'Local' : 'International';
         result[payKey]![originKey]!.add(item);
      }
      return result;
@@ -51,7 +51,7 @@ class CartProvider extends ChangeNotifier {
   double get totalAmount {
     var total = 0.0;
     _items.forEach((key, cartItem) {
-      total += cartItem.product.price * cartItem.quantity;
+      total += cartItem.unitPrice * cartItem.quantity;
     });
     return total;
   }
@@ -82,6 +82,41 @@ class CartProvider extends ChangeNotifier {
             selectedColor: selectedColor,
             wantsLoan: wantsLoan,
           ),
+        );
+      }
+    }
+    notifyListeners();
+  }
+
+  void addBulk(Product product, List<Map<String, dynamic>> selections) {
+    for (var selection in selections) {
+      String? variant = selection['variant'];
+      String? color = selection['color'];
+      int quantity = selection['quantity'] ?? 0;
+      bool wantsLoan = selection['wantsLoan'] ?? false;
+
+      if (quantity <= 0) continue;
+
+      String uniqueId = '${product.id}_${variant ?? 'none'}_${color?.replaceAll('#', '') ?? 'none'}_$wantsLoan';
+
+      if (_items.containsKey(uniqueId)) {
+        int newQty = _items[uniqueId]!.quantity + quantity;
+        if (newQty > product.stock) newQty = product.stock;
+        _items[uniqueId] = CartItem(
+          product: _items[uniqueId]!.product,
+          quantity: newQty,
+          selectedVariant: variant,
+          selectedColor: color,
+          wantsLoan: wantsLoan,
+        );
+      } else {
+        int actualQty = quantity > product.stock ? product.stock : quantity;
+        _items[uniqueId] = CartItem(
+          product: product,
+          quantity: actualQty,
+          selectedVariant: variant,
+          selectedColor: color,
+          wantsLoan: wantsLoan,
         );
       }
     }
@@ -154,8 +189,12 @@ class CartProvider extends ChangeNotifier {
   Future<bool> submitSubOrder({
     required List<CartItem> subItems,
     required String deliveryMethod,
+    required String deliveryAddress,
     required ProductProvider productProvider,
     String? paymentMethod,
+    double? latitude,
+    double? longitude,
+    String? voiceNote,
   }) async {
     if (subItems.isEmpty) return false;
 
@@ -174,8 +213,11 @@ class CartProvider extends ChangeNotifier {
         'client_name': 'Client UI',
         'client_phone': '',
         'delivery_method': deliveryMethod, // 'local_standard', 'local_instant', 'intl_avion', 'intl_bateau'
-        'delivery_address': 'Adresse Client',
+        'delivery_address': deliveryAddress,
         'payment_method': paymentMethod ?? (subItems.any((i) => i.wantsLoan) ? 'credit_application' : 'cash_on_delivery'),
+        if (latitude != null) 'latitude': latitude,
+        if (longitude != null) 'longitude': longitude,
+        if (voiceNote != null) 'voice_note': voiceNote,
       });
 
       if (response.statusCode == 201 && response.data['success']) {

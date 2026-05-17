@@ -3,7 +3,7 @@
 import React from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LayoutDashboard, Megaphone, Building2, Percent, LineChart } from 'lucide-react';
+import { LayoutDashboard, Megaphone, Building2, Percent, LineChart, Truck } from 'lucide-react';
 
 interface NavItemProps {
     href: string;
@@ -63,6 +63,12 @@ export default function SidebarNav() {
                 label="Commissions" 
                 icon={<Percent size={18} />} 
                 isActive={currentPath.startsWith("/platform/commissions")} 
+            />
+            <NavItem 
+                href="/platform/logistics-pricing" 
+                label="Logistics" 
+                icon={<Truck size={18} />} 
+                isActive={currentPath.startsWith("/platform/logistics")} 
             />
             <NavItem 
                 href="/platform/analytics" 

@@ -11,9 +11,11 @@ import 'package:mosombi_frontend/core/providers/agency_provider.dart';
 import 'package:mosombi_frontend/core/theme/app_colors.dart';
 import 'package:mosombi_frontend/core/theme/app_gradients.dart';
 import 'package:mosombi_frontend/core/widgets/glass_container.dart';
+import 'package:mosombi_frontend/core/widgets/product_image.dart';
 import 'package:mosombi_frontend/core/widgets/custom_app_bars.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 
+import 'package:mosombi_frontend/core/providers/cart_provider.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mosombi_frontend/core/providers/auth_provider.dart';
 import 'package:mosombi_frontend/core/models/product_model.dart';
@@ -41,7 +43,7 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
   List<String> _categories = ['Boutiques Locales', 'Électronique', 'Mode M/F', 'Beauté', 'Santé', 'Auto/Moto', 'Alimentation / Épicerie', 'Maison & Bureau', 'Immobilier', 'Services'];
 
   String _origin = 'Local 📍';
-  final List<String> _origins = ['Local 📍', 'Chine 🇨🇳', 'Dubaï 🇦🇪', 'Turquie 🇹🇷', 'France 🇫🇷'];
+  List<String> _origins = ['Local 📍'];
 
   // Champs dynamiques
   final _customSpecsCtrl = TextEditingController();
@@ -193,11 +195,7 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
   }
 
   Widget _buildNetworkOrBase64Image(String url) {
-    if (url.startsWith('data:image')) {
-      final base64String = url.replaceFirst(RegExp(r'data:image/[^;]+;base64,'), '');
-      return Image.memory(base64Decode(base64String), fit: BoxFit.cover);
-    }
-    return Image.network(url, fit: BoxFit.cover);
+    return ProductImageHelper.buildImage(url, fit: BoxFit.cover);
   }
 
   Widget _buildThumbnail(int index, bool isDark, Color hintColor) {
@@ -272,17 +270,74 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
     }
     
     // Mettre à jour l'origine si elle n'a pas encore été changée
-    if (_origins.isNotEmpty && _origins.first == 'Local 📍') {
+    if (_origins.isNotEmpty && _origins.first.contains('Local')) {
        _origins[0] = 'Local $_userCountryFlag';
-       if (widget.productToEdit == null || _origin == 'Local 📍') {
+       if (widget.productToEdit == null || _origin.contains('Local')) {
            _origin = _origins.first;
        }
+    }
+  }
+
+  void _loadDynamicOrigins() {
+    final cart = context.read<CartProvider>();
+    if (cart.logisticsSettings.isNotEmpty) {
+      final Set<String> uniqueOrigins = {};
+      
+      // Ajouter Local
+      uniqueOrigins.add('Local');
+      
+      // Collecter toutes les origines définies dans la matrice
+      cart.logisticsSettings.forEach((dest, config) {
+        if (config is Map && config.containsKey('International')) {
+          final intl = config['International'] as Map;
+          if (intl.containsKey('origins')) {
+             (intl['origins'] as Map).keys.forEach((o) => uniqueOrigins.add(o.toString()));
+          }
+        }
+      });
+
+      final List<String> dynamicOrigins = [];
+      for (var country in uniqueOrigins) {
+        String flag = '🌐';
+        if (country == 'Local') {
+          flag = _userCountryFlag;
+          dynamicOrigins.add('Local $flag');
+          continue;
+        }
+
+        if (country.contains('Congo') && !country.contains('RDC')) flag = '🇨🇬';
+        else if (country.contains('RDC')) flag = '🇨🇩';
+        else if (country.contains('Chine')) flag = '🇨🇳';
+        else if (country.contains('Dubaï') || country.contains('UAE')) flag = '🇦🇪';
+        else if (country.contains('France')) flag = '🇫🇷';
+        else if (country.contains('Turquie')) flag = '🇹🇷';
+        else if (country.contains('Gabon')) flag = '🇬🇦';
+        else if (country.contains('Cameroun')) flag = '🇨🇲';
+        else if (country.contains('Togo')) flag = '🇹🇬';
+        else if (country.contains('Bénin')) flag = '🇧🇯';
+
+        dynamicOrigins.add('$country $flag');
+      }
+
+      setState(() {
+        _origins = dynamicOrigins;
+        if (!_origins.contains(_origin)) {
+          _origin = _origins.first;
+        }
+      });
     }
   }
 
     @override
   void initState() {
     super.initState();
+    _initUserLocation();
+    
+    // Charger les origines dynamiques après le premier frame
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadDynamicOrigins();
+    });
+
     if (widget.productToEdit != null) {
        _nameCtrl.text = widget.productToEdit!.name;
        _descCtrl.text = widget.productToEdit!.description;
@@ -323,6 +378,19 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
                _electronicMemories = List<String>.from(specMap['Mémoire/Stockage']);
            } else {
                _electronicMemories = [specMap['Mémoire/Stockage'].toString()];
+           }
+           
+           for (var mem in _electronicMemories) {
+               final variantMatch = _variants.firstWhere(
+                  (v) => v['title'] == 'Capacité: $mem', 
+                  orElse: () => <String, dynamic>{}
+               );
+               String priceText = '';
+               if (variantMatch.isNotEmpty && variantMatch['price'] != null) {
+                  priceText = variantMatch['price'].toString();
+                  if (priceText.endsWith('.0')) priceText = priceText.substring(0, priceText.length - 2);
+               }
+               _memoryPriceControllers[mem] = TextEditingController(text: priceText);
            }
        }
        if (specMap['Taille'] != null) {
@@ -380,6 +448,7 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
   void _showAddVariantDialog({int? editIndex}) {
     final Map<String, dynamic>? variantToEdit = editIndex != null ? _variants[editIndex] : null;
     final stockCtrl = TextEditingController(text: variantToEdit?['stock']?.toString() ?? '1');
+    final priceCtrl = TextEditingController(text: variantToEdit?['price']?.toString() ?? '');
     List<String> selectedMemories = [];
     List<String> selectedSizes = [];
     String? selectedWeight;
@@ -632,6 +701,20 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
                         contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 15),
                       ),
                     ),
+                    const SizedBox(height: 24),
+
+                    Text('Prix spécifique (FCFA - Optionnel)', style: TextStyle(fontWeight: FontWeight.bold, color: textColor)),
+                    const SizedBox(height: 8),
+                    TextFormField(
+                      controller: priceCtrl,
+                      keyboardType: TextInputType.number,
+                      style: TextStyle(color: textColor),
+                      decoration: InputDecoration(
+                        hintText: 'Laisser vide pour utiliser le prix global',
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 15),
+                      ),
+                    ),
                     const SizedBox(height: 32),
 
                     SizedBox(
@@ -652,11 +735,13 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
                           List<String> hexColors = selectedVariantColors.map((c) => '#${c.value.toRadixString(16).substring(2, 8).toUpperCase()}').toList();
                           
                           int parsedStock = int.tryParse(stockCtrl.text) ?? 1;
+                          double? parsedPrice = double.tryParse(priceCtrl.text);
                           
                           setState(() {
                             final newVariant = {
                               'title': title,
                               'stock': parsedStock,
+                              'price': parsedPrice,
                               'colors': hexColors,
                             };
                             if (editIndex != null) {
@@ -1663,7 +1748,7 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
                              children: _variants.map((v) => ListTile(
                                contentPadding: EdgeInsets.zero,
                                title: Text(v['title'], style: TextStyle(color: textColor, fontWeight: FontWeight.bold)),
-                               subtitle: Text('En stock : ${v['stock']}', style: const TextStyle(color: Colors.green)),
+                               subtitle: Text('En stock : ${v['stock']}${v['price'] != null ? ' - ${v['price']} FCFA' : ''}', style: const TextStyle(color: Colors.green)),
                                trailing: Row(
                                  mainAxisSize: MainAxisSize.min,
                                  children: [

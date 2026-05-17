@@ -631,4 +631,76 @@ router.delete('/documents/:documentId', authenticateToken, asyncHandler(async (r
   });
 }));
 
+
+// =====================================================
+// 📍 ROUTES ADRESSES DE LIVRAISON
+// =====================================================
+
+/**
+ * GET /api/v1/users/delivery-addresses
+ * Récupérer les adresses de livraison sauvegardées
+ */
+router.get('/delivery-addresses', authenticateToken, asyncHandler(async (req, res) => {
+  const { data: currentUser } = await dbAdmin
+    .from('users')
+    .select('metadata')
+    .eq('id', req.user.id)
+    .single();
+
+  const addresses = currentUser?.metadata?.delivery_addresses || [];
+
+  res.json({
+    success: true,
+    data: addresses
+  });
+}));
+
+/**
+ * PUT /api/v1/users/delivery-addresses
+ * Remplacer toutes les adresses de livraison (sync complète)
+ */
+router.put('/delivery-addresses', authenticateToken, asyncHandler(async (req, res) => {
+  const { addresses } = req.body;
+
+  if (!Array.isArray(addresses)) {
+    throw new ValidationError('Le champ addresses doit être un tableau');
+  }
+
+  // Limiter à 20 adresses max
+  if (addresses.length > 20) {
+    throw new ValidationError('Maximum 20 adresses autorisées');
+  }
+
+  const { data: currentUser } = await dbAdmin
+    .from('users')
+    .select('metadata')
+    .eq('id', req.user.id)
+    .single();
+
+  const { error: updateError } = await dbAdmin
+    .from('users')
+    .update({
+      metadata: {
+        ...(currentUser?.metadata || {}),
+        delivery_addresses: addresses,
+        delivery_addresses_updated_at: new Date().toISOString()
+      },
+      updated_at: new Date().toISOString()
+    })
+    .eq('id', req.user.id);
+
+  if (updateError) {
+    logger.error('Erreur sauvegarde adresses:', { userId: req.user.id, error: updateError });
+    throw new ValidationError('Erreur lors de la sauvegarde des adresses');
+  }
+
+  logger.info('Adresses de livraison mises à jour', { userId: req.user.id, count: addresses.length });
+
+  res.json({
+    success: true,
+    message: `${addresses.length} adresse(s) sauvegardée(s)`,
+    data: addresses
+  });
+}));
+
 export default router;

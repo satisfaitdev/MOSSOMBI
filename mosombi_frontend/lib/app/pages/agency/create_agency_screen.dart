@@ -85,6 +85,9 @@ class _CreateAgencyScreenState extends ConsumerState<CreateAgencyScreen> {
   bool _isLoading = false;
   bool _autoLocation = true;
   bool _geoLoading = false;
+  
+  double? _lat;
+  double? _long;
 
   // Documents: docType -> bytes (for images) or String (for links)
   final Map<String, Uint8List> _docBytes = {};
@@ -140,6 +143,10 @@ class _CreateAgencyScreenState extends ConsumerState<CreateAgencyScreen> {
       final pos = await Geolocator.getCurrentPosition(
         locationSettings: const LocationSettings(accuracy: LocationAccuracy.high),
       );
+      
+      _lat = pos.latitude;
+      _long = pos.longitude;
+
       try {
         final placemarks = await placemarkFromCoordinates(pos.latitude, pos.longitude);
         if (placemarks.isNotEmpty) {
@@ -228,6 +235,8 @@ class _CreateAgencyScreenState extends ConsumerState<CreateAgencyScreen> {
       type: _selectedType,
       logoUrl: _logoUrl,
       documents: docs,
+      latitude: _lat,
+      longitude: _long,
     );
 
     setState(() => _isLoading = false);

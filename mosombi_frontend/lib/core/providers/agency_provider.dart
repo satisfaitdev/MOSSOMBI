@@ -44,17 +44,8 @@ class AgencyProvider extends ChangeNotifier {
       
       if (response.statusCode == 200 && response.data['success'] == true) {
          final data = response.data['data'];
-         if (data != null && data['agency'] != null) {
-            _currentAgency = Agency(
-              id: data['agency']['id'],
-              name: data['agency']['name'],
-              affiliationCode: data['agency']['affiliation_code'] ?? '------',
-              ownerUserId: data['agency']['owner_user_id'],
-              totalRevenue: double.tryParse(data['agency']['balance']?.toString() ?? '0') ?? 0.0,
-              activeAgents: 1, // Fallback if backend doesn't provide agent count
-              status: data['agency']['status'] ?? 'active',
-              createdAt: DateTime.tryParse(data['agency']['created_at'] ?? '') ?? DateTime.now(),
-            );
+          if (data != null && data['agency'] != null) {
+            _currentAgency = Agency.fromJson(data['agency']);
             
             _currentAgent = Agent(
               id: 'agent_${data['agency']['id']}', // Fallback since membership id isn't sent
@@ -78,6 +69,36 @@ class AgencyProvider extends ChangeNotifier {
       debugPrint("Aucune agence ou erreur de connexion: $e");
     }
     
+    _isLoading = false;
+    notifyListeners();
+    return false;
+  }
+
+  Future<bool> updateAgencySettings({
+    double? latitude,
+    double? longitude,
+    bool? useInternalFleetOnly,
+  }) async {
+    if (_currentAgency == null) return false;
+    
+    _isLoading = true;
+    notifyListeners();
+
+    try {
+      final response = await _apiClient.dio.patch('/agencies/my', data: {
+        if (latitude != null) 'latitude': latitude,
+        if (longitude != null) 'longitude': longitude,
+        if (useInternalFleetOnly != null) 'use_internal_fleet_only': useInternalFleetOnly,
+      });
+
+      if (response.statusCode == 200 && response.data['success'] == true) {
+        await checkMyAgencyContext(); // Refresh data
+        return true;
+      }
+    } catch (e) {
+      debugPrint("Erreur mise à jour paramètres agence: $e");
+    }
+
     _isLoading = false;
     notifyListeners();
     return false;
@@ -123,6 +144,8 @@ class AgencyProvider extends ChangeNotifier {
     required String type,
     String logoUrl = '',
     List<Map<String, String>> documents = const [],
+    double? latitude,
+    double? longitude,
   }) async {
      _isLoading = true;
      _error = null;
@@ -134,6 +157,8 @@ class AgencyProvider extends ChangeNotifier {
           'city': city,
           'address': address,
           'logo_url': logoUrl,
+          if (latitude != null) 'latitude': latitude,
+          if (longitude != null) 'longitude': longitude,
           'services': [
              {
                 'service_id': type,

@@ -73,6 +73,9 @@ dependencies:
   webview_flutter: ^4.10.0
   geolocator: ^13.0.2
   geocoding: ^3.0.0
+  speech_to_text: ^7.3.0
+  record: ^6.2.0
+  audioplayers: ^6.6.0
 
 
 dev_dependencies:

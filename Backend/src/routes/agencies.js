@@ -4,6 +4,7 @@ import crypto from 'crypto';
 import { dbAdmin } from '../config/db.js';
 import { asyncHandler, ValidationError, NotFoundError } from '../middleware/errorHandler.js';
 import { authenticateToken } from '../middleware/auth.js';
+import { processProductImages, saveBase64Image } from '../utils/fileStorage.js';
 
 const router = express.Router();
 
@@ -29,6 +30,9 @@ const applySchema = Joi.object({
       })
     )
     .default([]),
+  latitude: Joi.number().allow(null).optional(),
+  longitude: Joi.number().allow(null).optional(),
+  use_internal_fleet_only: Joi.boolean().default(false).optional(),
 });
 
 const joinByUserDisplaySchema = Joi.object({
@@ -45,6 +49,9 @@ const updateMyAgencySchema = Joi.object({
   city: Joi.string().allow('').max(160).optional(),
   address: Joi.string().allow('').max(300).optional(),
   logo_url: Joi.string().allow('').max(2000000).optional(),
+  latitude: Joi.number().allow(null).optional(),
+  longitude: Joi.number().allow(null).optional(),
+  use_internal_fleet_only: Joi.boolean().optional(),
 }).min(1);
 
 const createMyServiceRequestSchema = Joi.object({
@@ -168,6 +175,9 @@ router.post('/apply', asyncHandler(async (req, res) => {
         city: value.city || '',
         address: value.address || '',
         logo_url: value.logo_url || '',
+        latitude: value.latitude,
+        longitude: value.longitude,
+        use_internal_fleet_only: value.use_internal_fleet_only ?? false,
         status: 'pending',
         is_active: false,
         updated_at: now,
@@ -236,6 +246,9 @@ router.post('/apply', asyncHandler(async (req, res) => {
     address: value.address || '',
     logo_url: value.logo_url || '',
     owner_user_id: req.user.id,
+    latitude: value.latitude,
+    longitude: value.longitude,
+    use_internal_fleet_only: value.use_internal_fleet_only ?? false,
     status: 'pending',
     is_active: false,
     created_at: now,
@@ -523,30 +536,56 @@ router.post('/memberships/:id/reject', asyncHandler(async (req, res) => {
 }));
 
 // PUT /api/v1/agencies/my
-router.put('/my', asyncHandler(async (req, res) => {
-  const { error, value } = updateMyAgencySchema.validate(req.body);
-  if (error) throw new ValidationError(error.details[0].message, error.details);
+// PATCH /api/v1/agencies/my
+router.route('/my')
+  .put(asyncHandler(async (req, res) => {
+    const { error, value } = updateMyAgencySchema.validate(req.body);
+    if (error) throw new ValidationError(error.details[0].message, error.details);
 
-  const ctx = await getMyAgencyContext(req.user.id);
-  if (!ctx?.agency?.id) throw new NotFoundError('Agence introuvable');
-  if (!ctx.isOwner) throw new ValidationError('Accès refusé');
-  const agency = ctx.agency;
+    const ctx = await getMyAgencyContext(req.user.id);
+    if (!ctx?.agency?.id) throw new NotFoundError('Agence introuvable');
+    if (!ctx.isOwner) throw new ValidationError('Accès refusé');
+    const agency = ctx.agency;
 
-  const updates = {
-    ...value,
-    updated_at: new Date().toISOString(),
-  };
+    const updates = {
+      ...value,
+      updated_at: new Date().toISOString(),
+    };
 
-  const { data: updated, error: upErr } = await dbAdmin
-    .from('agencies')
-    .update(updates)
-    .eq('id', agency.id)
-    .select('*')
-    .single();
+    const { data: updated, error: upErr } = await dbAdmin
+      .from('agencies')
+      .update(updates)
+      .eq('id', agency.id)
+      .select('*')
+      .single();
 
-  if (upErr || !updated) throw new ValidationError('Erreur lors de la mise à jour');
-  return res.json({ success: true, data: updated });
-}));
+    if (upErr || !updated) throw new ValidationError('Erreur lors de la mise à jour');
+    return res.json({ success: true, data: updated });
+  }))
+  .patch(asyncHandler(async (req, res) => {
+    const { error, value } = updateMyAgencySchema.validate(req.body);
+    if (error) throw new ValidationError(error.details[0].message, error.details);
+
+    const ctx = await getMyAgencyContext(req.user.id);
+    if (!ctx?.agency?.id) throw new NotFoundError('Agence introuvable');
+    if (!ctx.isOwner) throw new ValidationError('Accès refusé');
+    const agency = ctx.agency;
+
+    const updates = {
+      ...value,
+      updated_at: new Date().toISOString(),
+    };
+
+    const { data: updated, error: upErr } = await dbAdmin
+      .from('agencies')
+      .update(updates)
+      .eq('id', agency.id)
+      .select('*')
+      .single();
+
+    if (upErr || !updated) throw new ValidationError('Erreur lors de la mise à jour');
+    return res.json({ success: true, data: updated });
+  }));
 
 // POST /api/v1/agencies/my/service-requests
 router.post('/my/service-requests', asyncHandler(async (req, res) => {
@@ -665,12 +704,22 @@ router.post('/my/products', asyncHandler(async (req, res) => {
   await assertCanManageMemberships({ agencyId: ctx.agency.id, userId: req.user.id });
 
   const now = new Date().toISOString();
+
+  // Convert base64 images to files stored on disk
+  const processedGallery = processProductImages(value.gallery_urls || [], 'products');
+  
+  // Process main image_url if it's base64
+  let mainImageUrl = value.image_url || '';
+  if (mainImageUrl && mainImageUrl.startsWith('data:image/')) {
+    const saved = saveBase64Image(mainImageUrl, 'products');
+    if (saved) mainImageUrl = saved;
+  }
   
   // Store all extra data in the metadata JSONB column
   const metadata = {
     currency: value.currency || 'XAF',
     media: {
-      images: value.gallery_urls || [],
+      images: processedGallery,
       video: value.video_url || null,
     },
     category: {
@@ -713,7 +762,7 @@ router.post('/my/products', asyncHandler(async (req, res) => {
     in_stock: value.in_stock,
     country: value.origin || value.country || 'CG',
     delivery_time: value.delivery_time || '2-3 Jours',
-    image_url: value.image_url || '',
+    image_url: mainImageUrl,
     shipping_unit: value.shipping_unit || 'kg',
     shipping_value: value.shipping_value || 0,
     metadata,
@@ -748,12 +797,15 @@ router.put('/my/products/:id', asyncHandler(async (req, res) => {
   await assertCanManageMemberships({ agencyId: ctx.agency.id, userId: req.user.id });
 
   const now = new Date().toISOString();
+
+  // Convert base64 images to files stored on disk
+  const processedGallery = processProductImages(value.gallery_urls || [], 'products');
   
   // Store all extra data in the metadata JSONB column
   const metadata = {
     currency: value.currency || 'XAF',
     media: {
-      images: value.gallery_urls || [],
+      images: processedGallery,
       video: value.video_url || null,
     },
     category: {
@@ -800,9 +852,14 @@ router.put('/my/products/:id', asyncHandler(async (req, res) => {
     updated_at: now,
   };
   
-  // N'updater l'image que si elle a été fournie
+  // N'updater l'image que si elle a été fournie — convertir base64 en fichier
   if (value.image_url && value.image_url !== '') {
+    if (value.image_url.startsWith('data:image/')) {
+      const saved = saveBase64Image(value.image_url, 'products');
+      if (saved) updates.image_url = saved;
+    } else {
       updates.image_url = value.image_url;
+    }
   }
 
   const { data: updated, error: updateErr } = await dbAdmin

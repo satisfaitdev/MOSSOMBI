@@ -8,6 +8,7 @@ import 'package:mosombi_frontend/core/theme/app_gradients.dart';
 import 'package:mosombi_frontend/core/widgets/animated_gradient_bg.dart';
 import 'package:mosombi_frontend/core/widgets/custom_app_bars.dart';
 import 'package:mosombi_frontend/core/widgets/glass_container.dart';
+import 'package:mosombi_frontend/core/widgets/product_image.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:go_router/go_router.dart';
 
@@ -263,10 +264,10 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
                 children: [
                   ClipRRect(
                     borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-                    child: Image.network(
+                    child: ProductImageHelper.buildImage(
                       product.imageUrl,
                       fit: BoxFit.cover,
-                      errorBuilder: (c, e, s) => Container(color: Colors.grey[300], child: const Icon(Icons.image_not_supported)),
+                      errorWidget: Container(color: Colors.grey[300], child: const Icon(Icons.image_not_supported)),
                     ),
                   ),
                   if (outOfStock)
@@ -296,7 +297,7 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(product.origin.contains('Local') ? Icons.location_on : Icons.flight, color: Colors.white, size: 10),
+                          Icon((product.origin ?? 'Local').contains('Local') ? Icons.location_on : Icons.flight, color: Colors.white, size: 10),
                           const SizedBox(width: 4),
                           Text(product.origin, style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
                         ],

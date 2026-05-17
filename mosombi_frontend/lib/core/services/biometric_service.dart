@@ -2,12 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:local_auth/local_auth.dart';
 import 'package:local_auth/error_codes.dart' as auth_error;
 import 'package:flutter/services.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 
 class BiometricService {
   static final LocalAuthentication _auth = LocalAuthentication();
 
   /// Check if the device supports biometrics AND has enrolled fingerprints/face
   static Future<bool> isSupported() async {
+    if (kIsWeb) return false;
     try {
       final canCheck = await _auth.canCheckBiometrics;
       final isDeviceSupported = await _auth.isDeviceSupported();
@@ -22,6 +24,7 @@ class BiometricService {
 
   /// Trigger biometric prompt and return result
   static Future<BiometricResult> authenticate() async {
+    if (kIsWeb) return BiometricResult.notAvailable;
     try {
       final authenticated = await _auth.authenticate(
         localizedReason: 'Utilisez votre empreinte ou Face ID pour vous connecter à Mossombi',

@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { fetchMe, isAdminRole, getApiBaseUrl, getAccessToken } from '@/lib/auth';
 import DashboardLayout from '@/components/DashboardLayout';
 import AdminCard from '@/components/AdminCard';
-import { Activity, Database, Network, Megaphone, Building2, ChevronRight, Lock, ShieldAlert, AlertTriangle } from 'lucide-react';
+import { Activity, Database, Network, Megaphone, Building2, ChevronRight, Lock, ShieldAlert, AlertTriangle, Truck } from 'lucide-react';
 
 async function fetchRealStats() {
   try {
@@ -214,6 +214,21 @@ export default async function Home() {
                   <div>
                     <span className="block text-sm font-medium text-zinc-200">Commissions</span>
                     <span className="block text-xs text-zinc-500 mt-0.5">Règles de partage de revenus</span>
+                  </div>
+                </div>
+                <div className="w-8 h-8 rounded-full bg-zinc-800/50 flex items-center justify-center text-zinc-500 group-hover/item:text-white group-hover/item:bg-zinc-800 transition-all">
+                  <ChevronRight size={14} />
+                </div>
+              </Link>
+
+              <Link href="/platform/logistics-pricing" className="group/item flex items-center justify-between p-4 bg-black/40 border border-zinc-800/60 rounded-2xl backdrop-blur-sm hover:border-zinc-700/80 transition-colors">
+                <div className="flex items-center gap-4">
+                  <div className="w-10 h-10 rounded-xl bg-zinc-900 border border-zinc-800 flex items-center justify-center text-amber-400">
+                    <Truck size={18} />
+                  </div>
+                  <div>
+                    <span className="block text-sm font-medium text-zinc-200">Logistique</span>
+                    <span className="block text-xs text-zinc-500 mt-0.5">Tarifs de livraison et transit</span>
                   </div>
                 </div>
                 <div className="w-8 h-8 rounded-full bg-zinc-800/50 flex items-center justify-center text-zinc-500 group-hover/item:text-white group-hover/item:bg-zinc-800 transition-all">

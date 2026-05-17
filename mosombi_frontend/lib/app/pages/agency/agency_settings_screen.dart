@@ -8,6 +8,8 @@ import 'package:mosombi_frontend/core/theme/app_colors.dart';
 import 'package:mosombi_frontend/core/widgets/custom_app_bars.dart';
 import 'package:mosombi_frontend/core/widgets/animated_gradient_bg.dart';
 import 'package:mosombi_frontend/core/widgets/glass_container.dart';
+import 'package:geolocator/geolocator.dart';
+import 'package:geocoding/geocoding.dart';
 
 class AgencySettingsScreen extends ConsumerStatefulWidget {
   const AgencySettingsScreen({super.key});
@@ -17,7 +19,47 @@ class AgencySettingsScreen extends ConsumerStatefulWidget {
 }
 
 class _AgencySettingsScreenState extends ConsumerState<AgencySettingsScreen> {
-  bool _useInternalDriversOnly = false;
+  bool _isLocating = false;
+
+  Future<void> _updateLocation() async {
+    setState(() => _isLocating = true);
+    
+    try {
+      bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!serviceEnabled) {
+         if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Veuillez activer le GPS.')));
+         return;
+      }
+
+      LocationPermission permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+        if (permission == LocationPermission.denied) return;
+      }
+      
+      if (permission == LocationPermission.deniedForever) return;
+
+      Position position = await Geolocator.getCurrentPosition();
+      
+      final provider = context.read<AgencyProvider>();
+      final success = await provider.updateAgencySettings(
+        latitude: position.latitude,
+        longitude: position.longitude,
+      );
+
+      if (mounted) {
+        if (success) {
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Position de l\'agence mise à jour !'), backgroundColor: Colors.green));
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Erreur lors de la mise à jour.')));
+        }
+      }
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Erreur: $e')));
+    } finally {
+      if (mounted) setState(() => _isLocating = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -65,24 +107,52 @@ class _AgencySettingsScreenState extends ConsumerState<AgencySettingsScreen> {
                     ),
                     const SizedBox(height: 24),
 
-                    // Actions / Config
-                    Text('Configuration', style: TextStyle(color: textColor, fontSize: 16, fontWeight: FontWeight.w900)),
+                    // Logistique & Tracking Section
+                    Text('Logistique & Tracking', style: TextStyle(color: textColor, fontSize: 16, fontWeight: FontWeight.w900)),
                     const SizedBox(height: 12),
                     GlassContainer(
-                      padding: const EdgeInsets.all(8),
+                      padding: const EdgeInsets.all(16),
                       child: Column(
                         children: [
-                          _buildActionTile('Gérer les Rôles', 'Modifier les permissions', Icons.admin_panel_settings_rounded, isDark, onTap: () {
-                            context.push('/agency-team');
-                          }),
+                          Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(10),
+                                decoration: BoxDecoration(color: const Color(0xFF00E5C5).withValues(alpha: 0.1), shape: BoxShape.circle),
+                                child: const Icon(Icons.location_on_rounded, color: Color(0xFF00E5C5), size: 20),
+                              ),
+                              const SizedBox(width: 16),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text('Position GPS Agence', style: TextStyle(color: hintColor, fontSize: 12)),
+                                    Text(
+                                      (agency.latitude != null && agency.longitude != null) 
+                                        ? '${agency.latitude!.toStringAsFixed(4)}, ${agency.longitude!.toStringAsFixed(4)}'
+                                        : 'Non définie (Requis pour tracking)', 
+                                      style: TextStyle(color: (agency.latitude != null) ? textColor : Colors.orange, fontSize: 14, fontWeight: FontWeight.bold)
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              if (_isLocating)
+                                const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF00E5C5)))
+                              else
+                                TextButton(
+                                  onPressed: _updateLocation,
+                                  child: const Text('Mettre à jour', style: TextStyle(color: Color(0xFF00E5C5), fontWeight: FontWeight.bold)),
+                                ),
+                            ],
+                          ),
+                          const Divider(color: Colors.white12, height: 24),
                           SwitchListTile(
-                            value: _useInternalDriversOnly,
+                            contentPadding: EdgeInsets.zero,
+                            value: agency.useInternalFleetOnly,
                             onChanged: (val) {
-                              setState(() {
-                                _useInternalDriversOnly = val;
-                              });
+                              provider.updateAgencySettings(useInternalFleetOnly: val);
                             },
-                            title: Text('Flotte Interne Uniquement', style: TextStyle(color: isDark ? Colors.white : Colors.black, fontWeight: FontWeight.bold, fontSize: 14)),
+                            title: Text('Flotte Interne Uniquement', style: TextStyle(color: textColor, fontWeight: FontWeight.bold, fontSize: 14)),
                             subtitle: const Text('N\'utiliser que vos propres employés comme livreurs.', style: TextStyle(fontSize: 12, color: Colors.grey)),
                             secondary: Container(
                               padding: const EdgeInsets.all(10),
@@ -94,6 +164,21 @@ class _AgencySettingsScreenState extends ConsumerState<AgencySettingsScreen> {
                             ),
                             activeColor: const Color(0xFF6C4EF6),
                           ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+
+                    // Actions / Config
+                    Text('Configuration', style: TextStyle(color: textColor, fontSize: 16, fontWeight: FontWeight.w900)),
+                    const SizedBox(height: 12),
+                    GlassContainer(
+                      padding: const EdgeInsets.all(8),
+                      child: Column(
+                        children: [
+                          _buildActionTile('Gérer les Rôles', 'Modifier les permissions', Icons.admin_panel_settings_rounded, isDark, onTap: () {
+                            context.push('/agency-team');
+                          }),
                           _buildActionTile('Services Approuvés', 'Demander un nouveau service', Icons.category_rounded, isDark, onTap: () {
                             _showServicesBottomSheet(context, isDark);
                           }),
@@ -108,18 +193,21 @@ class _AgencySettingsScreenState extends ConsumerState<AgencySettingsScreen> {
                     ),
                     
                     const SizedBox(height: 32),
-                    SizedBox(
-                      width: double.infinity,
-                      child: TextButton.icon(
-                        onPressed: () {
-                          _showDeleteDialog(context, isDark);
-                        },
-                        icon: const Icon(Icons.delete_outline_rounded, color: Colors.red),
-                        label: const Text('Clôturer cette agence', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
-                        style: TextButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(vertical: 16),
-                          backgroundColor: Colors.red.withValues(alpha: 0.1),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 24),
+                      child: SizedBox(
+                        width: double.infinity,
+                        child: TextButton.icon(
+                          onPressed: () {
+                            _showDeleteDialog(context, isDark);
+                          },
+                          icon: const Icon(Icons.delete_outline_rounded, color: Colors.red),
+                          label: const Text('Clôturer cette agence', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
+                          style: TextButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 16),
+                            backgroundColor: Colors.red.withValues(alpha: 0.1),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                          ),
                         ),
                       ),
                     ),

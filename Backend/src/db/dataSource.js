@@ -11,6 +11,9 @@ import { Transaction } from './entities/Transaction.js';
 import { UserWallet } from './entities/UserWallet.js';
 import { TwoFactorCode } from './entities/TwoFactorCode.js';
 import { PasswordResetToken } from './entities/PasswordResetToken.js';
+import { AppSettings } from './entities/AppSettings.js';
+import { AgencyArticle } from './entities/AgencyArticle.js';
+import { AgencySale } from './entities/AgencySale.js';
 
 dotenv.config();
 
@@ -34,6 +37,9 @@ export const appDataSource = new DataSource({
     UserWallet,
     TwoFactorCode,
     PasswordResetToken,
+    AppSettings,
+    AgencyArticle,
+    AgencySale,
   ],
   synchronize: process.env.DB_SYNCHRONIZE === 'true' || process.env.NODE_ENV === 'development',
   logging: process.env.TYPEORM_LOGGING === 'true',
@@ -246,6 +252,9 @@ async function ensureAgenciesTables() {
         owner_user_id uuid NULL,
         status text NOT NULL DEFAULT 'pending',
         is_active boolean NOT NULL DEFAULT false,
+        latitude numeric NULL,
+        longitude numeric NULL,
+        use_internal_fleet_only boolean NOT NULL DEFAULT false,
         created_at timestamptz NOT NULL DEFAULT now(),
         updated_at timestamptz NOT NULL DEFAULT now()
       )
@@ -257,6 +266,9 @@ async function ensureAgenciesTables() {
   await safeQuery('ALTER TABLE public.agencies ADD COLUMN IF NOT EXISTS owner_user_id uuid NULL');
   await safeQuery("ALTER TABLE public.agencies ADD COLUMN IF NOT EXISTS status text NOT NULL DEFAULT 'pending'");
   await safeQuery('ALTER TABLE public.agencies ADD COLUMN IF NOT EXISTS is_active boolean NOT NULL DEFAULT false');
+  await safeQuery('ALTER TABLE public.agencies ADD COLUMN IF NOT EXISTS latitude numeric NULL');
+  await safeQuery('ALTER TABLE public.agencies ADD COLUMN IF NOT EXISTS longitude numeric NULL');
+  await safeQuery('ALTER TABLE public.agencies ADD COLUMN IF NOT EXISTS use_internal_fleet_only boolean NOT NULL DEFAULT false');
   await safeQuery('ALTER TABLE public.agencies ADD COLUMN IF NOT EXISTS created_at timestamptz NOT NULL DEFAULT now()');
   await safeQuery('ALTER TABLE public.agencies ADD COLUMN IF NOT EXISTS updated_at timestamptz NOT NULL DEFAULT now()');
 
@@ -609,12 +621,34 @@ async function ensureStoreLogisticsTables() {
       dropoff_lng numeric NULL,
       tracking_history jsonb NOT NULL DEFAULT '[]'::jsonb,
       created_at timestamptz NOT NULL DEFAULT now(),
-      updated_at timestamptz NOT NULL DEFAULT now()
+      updated_at timestamptz NOT NULL DEFAULT now(),
+      voice_note_url text NULL
     )
   `);
+  await safeQuery('ALTER TABLE public.deliveries ADD COLUMN IF NOT EXISTS voice_note_url text NULL');
   await safeQuery('CREATE INDEX IF NOT EXISTS idx_deliveries_sale ON public.deliveries(sale_id)');
   await safeQuery('CREATE INDEX IF NOT EXISTS idx_deliveries_driver ON public.deliveries(driver_user_id)');
   await safeQuery('CREATE INDEX IF NOT EXISTS idx_deliveries_status ON public.deliveries(status)');
+  await safeQuery('ALTER TABLE public.deliveries ADD COLUMN IF NOT EXISTS voice_note_url text NULL');
+
+  // Zones de livraison géofencing
+  await safeQuery(`
+    CREATE TABLE IF NOT EXISTS public.logistics_zones (
+      id uuid PRIMARY KEY,
+      agency_id uuid NULL,
+      name text NOT NULL,
+      city text NOT NULL,
+      boundary geometry(Polygon, 4326) NOT NULL,
+      base_fee numeric NOT NULL DEFAULT 0,
+      multiplier numeric NOT NULL DEFAULT 1,
+      is_active boolean NOT NULL DEFAULT true,
+      created_at timestamptz NOT NULL DEFAULT now(),
+      updated_at timestamptz NOT NULL DEFAULT now()
+    )
+  `);
+  await safeQuery('CREATE INDEX IF NOT EXISTS idx_logistics_zones_boundary ON public.logistics_zones USING GIST (boundary)');
+  await safeQuery('CREATE INDEX IF NOT EXISTS idx_logistics_zones_city ON public.logistics_zones(city)');
+  await safeQuery('CREATE INDEX IF NOT EXISTS idx_logistics_zones_active ON public.logistics_zones(is_active)');
 
   // Litiges
   await safeQuery(`

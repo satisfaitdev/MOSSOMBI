@@ -49,11 +49,30 @@ yarn-error.log*
 .flutter-plugins-dependencies
 .pub-cache/
 .pub/
+/build/
 android/app/debug
 android/app/profile
 android/app/release
 app.*.symbols
 app.*.map.json
+
+# Flutter platform builds (generated)
+ios/Pods/
+ios/.symlinks/
+ios/Flutter/.last_build_id
+macos/Pods/
+macos/.symlinks/
+windows/flutter/ephemeral/
+linux/flutter/ephemeral/
+
+# Firebase secrets (NEVER commit)
+google-services.json
+GoogleService-Info.plist
+firebase_app_id_file.json
+
+# Android signing
+android/key.properties
+*.jks
 
 # --- Testing & Coverage ---
 coverage/

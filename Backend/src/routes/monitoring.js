@@ -4,6 +4,7 @@
  */
 
 import express from 'express';
+import crypto from 'crypto';
 import { asyncHandler } from '../middleware/errorHandler.js';
 import { authenticateToken } from '../middleware/authMiddleware.js';
 import { monitoringService } from '../services/monitoringService.js';
@@ -14,6 +15,7 @@ import { redisRateLimitService } from '../services/redisRateLimitService.js';
 import { alertService } from '../services/alertService.js';
 import { logger } from '../utils/logger.js';
 import { dbAdmin } from '../config/db.js';
+import { appDataSource } from '../db/dataSource.js';
 
 const router = express.Router();
 
@@ -359,8 +361,12 @@ router.get('/logistics-settings', asyncHandler(async (req, res) => {
  * Mettre à jour la matrice logistique (Admin uniquement)
  */
 router.post('/logistics-settings', authenticateToken, asyncHandler(async (req, res) => {
-  // Vérification stricte du rôle admin
-  if (req.user.role !== 'admin' && req.user.role !== 'super_admin') {
+  // Vérification stricte du rôle admin (insensible à la casse)
+  const userRole = (req.user?.role || '').toLowerCase();
+  const isSuperAdmin = Boolean(req.user?.is_super_admin);
+  
+  if (userRole !== 'admin' && userRole !== 'super_admin' && !isSuperAdmin) {
+    logger.warn('Accès refusé aux réglages logistiques', { userId: req.user.id, role: req.user.role });
     return res.status(403).json({
       success: false,
       error: 'Accès refusé. Droits administrateur requis.'
@@ -379,6 +385,58 @@ router.post('/logistics-settings', authenticateToken, asyncHandler(async (req, r
     .single();
 
   if (error) throw new Error(error.message);
+
+  // Synchronisation avec la table logistics_zones (pour le geofencing PostGIS)
+  try {
+    const matrix = req.body;
+    const zonesToSync = [];
+
+    Object.entries(matrix).forEach(([country, countryData]) => {
+      const local = countryData.Local;
+      if (local && local.cities) {
+        Object.entries(local.cities).forEach(([cityName, cityData]) => {
+          const cityZones = cityData.zones;
+          if (cityZones) {
+            Object.entries(cityZones).forEach(([zoneName, zoneData]) => {
+              const zd = zoneData;
+              if (zd.boundary && Array.isArray(zd.boundary) && zd.boundary.length >= 3) {
+                zonesToSync.push({
+                  name: zoneName,
+                  city: cityName,
+                  boundary: zd.boundary,
+                  base_fee: zd.fee || 0,
+                  multiplier: zd.multiplier || 1
+                });
+              }
+            });
+          }
+        });
+      }
+    });
+
+    if (zonesToSync.length > 0) {
+      // Pour rester simple, on vide et on recrée les zones liées au geofencing
+      // Dans une version plus complexe, on ferait un upsert intelligent par nom/ville
+      await appDataSource.query('DELETE FROM public.logistics_zones');
+
+      for (const zone of zonesToSync) {
+        const coords = zone.boundary.map((p) => `${p[0]} ${p[1]}`).join(', ');
+        const first = zone.boundary[0];
+        const last = zone.boundary[zone.boundary.length - 1];
+        const closedCoords = (first[0] === last[0] && first[1] === last[1]) ? coords : `${coords}, ${first[0]} ${first[1]}`;
+        const wkt = `POLYGON((${closedCoords}))`;
+        
+        await appDataSource.query(`
+          INSERT INTO public.logistics_zones (id, name, city, boundary, base_fee, multiplier)
+          VALUES ($1, $2, $3, ST_GeomFromText($4, 4326), $5, $6)
+        `, [crypto.randomUUID(), zone.name, zone.city, wkt, zone.base_fee, zone.multiplier]);
+      }
+      logger.info(`Synchronisation de ${zonesToSync.length} zones de geofencing terminée.`);
+    }
+  } catch (syncErr) {
+    logger.error('Erreur lors de la synchronisation des zones logistiques:', syncErr);
+    // On ne bloque pas la réponse principale si la synchro échoue, mais on log l'erreur
+  }
 
   res.json({
     success: true,
