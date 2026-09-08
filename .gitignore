@@ -95,3 +95,14 @@ __pycache__/
 *.tmp
 *.temp
 scratch/
+.playwright-cli/
+test__*.png
+test_*.webm
+test_script.js
+01-home-page.png
+travel_page.png
+test_splash.png
+Backend/reset_pwd.cjs
+Backend/fix_pwd.cjs
+Backend/fix_pwd.js
+Backend/verify_pwd.cjs

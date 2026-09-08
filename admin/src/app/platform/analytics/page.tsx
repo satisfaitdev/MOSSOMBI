@@ -21,18 +21,24 @@ export default function AnalyticsPage() {
       setLoading(true);
       setError(null);
       try {
-        // Fetch agencies data for stats
-        const agenciesRes = await fetch('/api/platform/agencies', { cache: 'no-store' });
+        // Fetch agencies and ads data for stats
+        const [agenciesRes, adsRes] = await Promise.all([
+          fetch('/api/platform/agencies', { cache: 'no-store' }),
+          fetch('/api/ads', { cache: 'no-store' }),
+        ]);
+
         const agenciesJson = await agenciesRes.json().catch(() => null);
+        const adsJson = await adsRes.json().catch(() => null);
 
         const agencies = agenciesJson?.success ? (agenciesJson.data || []) : [];
+        const ads = adsJson?.success ? (adsJson.data || []) : [];
 
         setStats({
-          totalUsers: 0,
+          totalUsers: agencies.reduce((acc: number, a: any) => acc + (a.member_count || a.members?.length || 0), 0),
           totalAgencies: agencies.length,
           pendingAgencies: agencies.filter((a: any) => a.status === 'pending').length,
           activeAgencies: agencies.filter((a: any) => a.status === 'approved').length,
-          totalAds: 0,
+          totalAds: ads.length,
         });
       } catch (e: any) {
         setError(e?.message || 'Erreur de chargement');
@@ -120,14 +126,49 @@ export default function AnalyticsPage() {
         ))}
       </div>
 
-      {/* Info */}
-      <div className="glass-card rounded-2xl p-8 border border-zinc-800/50 text-center">
-        <BarChart3 className="w-12 h-12 text-zinc-700 mx-auto mb-4" />
-        <h3 className="text-lg font-semibold text-zinc-300 mb-2">Module Analytics en développement</h3>
-        <p className="text-sm text-zinc-500 max-w-md mx-auto">
-          Les graphiques détaillés de revenus, trafic et performances seront disponibles dans une prochaine mise à jour.
-          Les données ci-dessus reflètent les chiffres réels de votre base de données.
-        </p>
+      {/* Additional Stats */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="glass-card rounded-2xl p-6 border border-zinc-800/50">
+          <h3 className="text-sm font-bold uppercase tracking-[0.15em] text-zinc-500 mb-4">Répartition des Agences</h3>
+          <div className="flex items-end gap-4 h-40">
+            {[
+              { label: "Actives", value: stats?.activeAgencies ?? 0, color: "bg-emerald-500" },
+              { label: "Attente", value: stats?.pendingAgencies ?? 0, color: "bg-amber-500" },
+              { label: "Total", value: stats?.totalAgencies ?? 0, color: "bg-blue-500" },
+            ].map((item) => {
+              const maxVal = Math.max(stats?.activeAgencies ?? 0, stats?.pendingAgencies ?? 0, stats?.totalAgencies ?? 0, 1);
+              const h = Math.max((item.value / maxVal) * 100, 10);
+              return (
+                <div key={item.label} className="flex-1 flex flex-col items-center gap-2 justify-end h-full">
+                  <span className="text-xs text-zinc-400 font-medium">{item.value}</span>
+                  <div className={`w-full ${item.color} rounded-t-lg transition-all duration-500`} style={{ height: `${h}%` }}></div>
+                  <span className="text-xs text-zinc-500 font-medium">{item.label}</span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+        <div className="glass-card rounded-2xl p-6 border border-zinc-800/50">
+          <h3 className="text-sm font-bold uppercase tracking-[0.15em] text-zinc-500 mb-4">Vue d&apos;ensemble</h3>
+          <div className="space-y-4">
+            <div className="flex justify-between items-center py-2 border-b border-zinc-800/50">
+              <span className="text-zinc-400 text-sm">Utilisateurs estimés</span>
+              <span className="text-white font-bold">{stats?.totalUsers ?? 0}</span>
+            </div>
+            <div className="flex justify-between items-center py-2 border-b border-zinc-800/50">
+              <span className="text-zinc-400 text-sm">Total Annonces</span>
+              <span className="text-white font-bold">{stats?.totalAds ?? 0}</span>
+            </div>
+            <div className="flex justify-between items-center py-2 border-b border-zinc-800/50">
+              <span className="text-zinc-400 text-sm">Agences Actives</span>
+              <span className="text-emerald-400 font-bold">{stats?.activeAgencies ?? 0}</span>
+            </div>
+            <div className="flex justify-between items-center py-2">
+              <span className="text-zinc-400 text-sm">En Attente</span>
+              <span className="text-amber-400 font-bold">{stats?.pendingAgencies ?? 0}</span>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );

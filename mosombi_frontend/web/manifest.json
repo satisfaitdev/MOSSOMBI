@@ -1,17 +1,56 @@
 {
-    "name": "mosombi_frontend",
-    "short_name": "mosombi_frontend",
+    "name": "Mossombi",
+    "short_name": "Mossombi",
+    "description": "Super App Multi-Services — Marketplace, Fintech, Transport, Food Delivery",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#0175C2",
-    "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "background_color": "#0A0E27",
+    "theme_color": "#6C4EF6",
     "orientation": "portrait-primary",
+    "id": "/",
+    "scope": "/",
+    "categories": [
+        "shopping",
+        "finance",
+        "food",
+        "travel",
+        "utilities"
+    ],
     "prefer_related_applications": false,
     "icons": [
         {
+            "src": "icons/Icon-72.png",
+            "sizes": "72x72",
+            "type": "image/png"
+        },
+        {
+            "src": "icons/Icon-96.png",
+            "sizes": "96x96",
+            "type": "image/png"
+        },
+        {
+            "src": "icons/Icon-128.png",
+            "sizes": "128x128",
+            "type": "image/png"
+        },
+        {
+            "src": "icons/Icon-144.png",
+            "sizes": "144x144",
+            "type": "image/png"
+        },
+        {
+            "src": "icons/Icon-152.png",
+            "sizes": "152x152",
+            "type": "image/png"
+        },
+        {
             "src": "icons/Icon-192.png",
             "sizes": "192x192",
+            "type": "image/png"
+        },
+        {
+            "src": "icons/Icon-384.png",
+            "sizes": "384x384",
             "type": "image/png"
         },
         {
@@ -31,5 +70,6 @@
             "type": "image/png",
             "purpose": "maskable"
         }
-    ]
+    ],
+    "related_applications": []
 }

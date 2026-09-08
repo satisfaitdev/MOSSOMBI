@@ -66,12 +66,10 @@ const generateSessionToken = () => {
 
 // Extraire les informations de géolocalisation depuis l'IP
 const getLocationFromIP = (ip) => {
-  // TODO: Intégrer un service de géolocalisation IP
-  // Pour l'instant, on retourne des valeurs par défaut
-  return {
-    country: 'CD',
-    city: 'Kinshasa'
-  };
+  if (!ip || ip === '127.0.0.1' || ip === '::1' || ip === '::ffff:127.0.0.1') {
+    return { country: null, city: null };
+  }
+  return { country: null, city: null };
 };
 
 // Nettoyer les sessions expirées
@@ -126,9 +124,16 @@ router.get('/', authenticateToken, asyncHandler(async (req, res) => {
   }
 
   // Enrichir les données des sessions
+  const currentIp = req.ip || req.connection?.remoteAddress;
+  const currentUserAgent = req.get('User-Agent');
+  const currentSessionToken = req.headers['x-session-token'];
+  
   const enrichedSessions = sessions?.map(session => ({
     ...session,
-    is_current: false, // TODO: Détecter la session courante
+    is_current: (
+      session.session_token === currentSessionToken ||
+      (session.ip_address === currentIp && session.user_agent === currentUserAgent)
+    ),
     days_since_last_activity: Math.floor(
       (new Date() - new Date(session.last_activity_at)) / (1000 * 60 * 60 * 24)
     )

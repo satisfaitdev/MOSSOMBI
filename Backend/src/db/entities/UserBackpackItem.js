@@ -11,6 +11,8 @@ export const UserBackpackItem = new EntitySchema({
     category: { type: 'text' },
     rarity: { type: 'text', default: 'common' },
     metadata: { type: 'jsonb', nullable: true },
+    is_equipped: { type: 'boolean', default: false },
+    quantity: { type: 'int', default: 1 },
     obtained_at: { type: 'timestamptz', nullable: true },
     created_at: { type: 'timestamptz', createDate: true },
   },

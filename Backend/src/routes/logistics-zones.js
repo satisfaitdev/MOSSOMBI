@@ -3,7 +3,7 @@ import Joi from 'joi';
 import crypto from 'crypto';
 import { dbAdmin } from '../config/db.js';
 import { appDataSource } from '../db/dataSource.js';
-import { authenticateToken } from '../middleware/authMiddleware.js';
+import { authenticateToken, requireAdmin } from '../middleware/authMiddleware.js';
 import { asyncHandler, ValidationError, NotFoundError } from '../middleware/errorHandler.js';
 
 const router = express.Router();
@@ -60,8 +60,7 @@ router.post('/match', asyncHandler(async (req, res) => {
 }));
 
 // 🚀 POST /api/v1/logistics-zones - Créer une zone (Admin)
-router.post('/', authenticateToken, asyncHandler(async (req, res) => {
-  // TODO: Vérifier rôle admin
+router.post('/', authenticateToken, requireAdmin, asyncHandler(async (req, res) => {
   const schema = Joi.object({
     name: Joi.string().required(),
     city: Joi.string().required(),

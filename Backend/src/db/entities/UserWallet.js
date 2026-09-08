@@ -7,7 +7,7 @@ export const UserWallet = new EntitySchema({
     id: { type: 'uuid', primary: true, generated: 'uuid' },
     user_id: { type: 'uuid' },
     balance: { type: 'numeric', default: 0 },
-    currency: { type: 'text', default: 'CDF' },
+    currency: { type: 'text', default: 'XAF' },
     status: { type: 'text', default: 'active' },
     last_transaction_at: { type: 'timestamptz', nullable: true },
     created_at: { type: 'timestamptz', createDate: true },

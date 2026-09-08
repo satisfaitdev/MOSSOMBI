@@ -2,8 +2,10 @@ import 'dart:async';
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:latlong2/latlong.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:mosombi_frontend/core/services/ride_notification_service.dart';
 import 'package:mosombi_frontend/core/services/websocket_service.dart';
+import 'package:mosombi_frontend/core/network/api_client.dart';
 
 enum RideStatus { idle, configuring, searching, waitingAcceptance, driverEnRoute, arrived, inTransit, completed }
 enum RideType { classic, shared }
@@ -30,7 +32,7 @@ class DriverInfo {
 
 class TransportProvider extends ChangeNotifier {
   // --- Ride Coordinates ---
-  LatLng _currentLocation = const LatLng(-4.266133, 15.283182); // Brazzaville par défaut
+  LatLng? _currentLocation;
   LatLng? _pickupLocation;
   LatLng? _dropoffLocation;
   String _pickupAddress = "Position Actuelle";
@@ -58,7 +60,7 @@ class TransportProvider extends ChangeNotifier {
   StreamSubscription<LatLng>? _wsSubscription;
 
   // --- Getters ---
-  LatLng get currentLocation => _currentLocation;
+  LatLng? get currentLocation => _currentLocation;
   LatLng? get pickupLocation => _pickupLocation;
   LatLng? get dropoffLocation => _dropoffLocation;
   String get pickupAddress => _pickupAddress;
@@ -78,19 +80,64 @@ class TransportProvider extends ChangeNotifier {
   List<DriverInfo> get availableDrivers => _allDrivers.where((d) => d.isAvailable).toList();
   DriverInfo? get assignedDriver => _assignedDriver;
 
+  final ApiClient _apiClient = ApiClient();
+
   TransportProvider() {
-    _pickupLocation = _currentLocation;
-    _generateMockDrivers();
+    _initLocation();
   }
 
-  void _generateMockDrivers() {
-    final random = Random();
-    _allDrivers.addAll([
-      DriverInfo(id: 'd1', name: 'Patrick M.', carModel: 'Toyota Yaris (Blanche)', licensePlate: '1234 AB 5', rating: 4.8, position: LatLng(_currentLocation.latitude + (random.nextDouble() * 0.01 - 0.005), _currentLocation.longitude + (random.nextDouble() * 0.01 - 0.005))),
-      DriverInfo(id: 'd2', name: 'Armel B.', carModel: 'Hyundai Elantra (Grise)', licensePlate: '9876 CD 4', rating: 4.9, position: LatLng(_currentLocation.latitude + (random.nextDouble() * 0.01 - 0.005), _currentLocation.longitude + (random.nextDouble() * 0.01 - 0.005))),
-      DriverInfo(id: 'd3', name: 'Julie N.', carModel: 'Kia Rio (Noire)', licensePlate: '5544 EF 1', rating: 5.0, position: LatLng(_currentLocation.latitude + (random.nextDouble() * 0.01 - 0.005), _currentLocation.longitude + (random.nextDouble() * 0.01 - 0.005))),
-      DriverInfo(id: 'd4', name: 'Derrick', carModel: 'Peugeot 208', licensePlate: '1122 GH 2', rating: 4.5, isAvailable: false, position: LatLng(_currentLocation.latitude + 0.02, _currentLocation.longitude + 0.02)),
-    ]);
+  Future<void> _initLocation() async {
+    try {
+      final pos = await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(accuracy: LocationAccuracy.high),
+      ).timeout(const Duration(seconds: 10));
+      _currentLocation = LatLng(pos.latitude, pos.longitude);
+      _pickupLocation = _currentLocation;
+    } catch (e) {
+      debugPrint('Geolocator.getCurrentPosition error: $e');
+      try {
+        final lastPos = await Geolocator.getLastKnownPosition();
+        if (lastPos != null) {
+          _currentLocation = LatLng(lastPos.latitude, lastPos.longitude);
+          _pickupLocation = _currentLocation;
+        }
+      } catch (e2) {
+        debugPrint('Geolocator.getLastKnownPosition also failed: $e2');
+      }
+    }
+    notifyListeners();
+    if (_currentLocation != null) _fetchNearbyDrivers();
+  }
+
+  Future<void> _fetchNearbyDrivers() async {
+    if (_currentLocation == null) return;
+    try {
+      final response = await _apiClient.dio.get('/taxi/nearby-drivers', queryParameters: {
+        'lat': _currentLocation!.latitude,
+        'lng': _currentLocation!.longitude,
+      });
+      if (response.statusCode == 200 && response.data['success'] == true) {
+        final List drivers = response.data['data'] ?? [];
+        _allDrivers.clear();
+        for (var d in drivers) {
+          _allDrivers.add(DriverInfo(
+            id: d['id']?.toString() ?? '',
+            name: d['name']?.toString() ?? 'Chauffeur',
+            carModel: d['car_model']?.toString() ?? '',
+            licensePlate: d['license_plate']?.toString() ?? '',
+            rating: double.tryParse(d['rating']?.toString() ?? '4.5') ?? 4.5,
+            position: LatLng(
+              double.tryParse(d['latitude']?.toString() ?? '0') ?? _currentLocation!.latitude,
+              double.tryParse(d['longitude']?.toString() ?? '0') ?? _currentLocation!.longitude,
+            ),
+            isAvailable: d['is_available'] as bool? ?? true,
+          ));
+        }
+        notifyListeners();
+      }
+    } catch (e) {
+      debugPrint('Error fetching nearby drivers: $e');
+    }
   }
 
   // --- Setup Ride ---
@@ -130,7 +177,7 @@ class TransportProvider extends ChangeNotifier {
   }
 
   void _calculatePrice() {
-    if (_dropoffLocation == null) return;
+    if (_dropoffLocation == null || _pickupLocation == null) return;
     final distanceKm = const Distance().as(LengthUnit.Kilometer, _pickupLocation!, _dropoffLocation!);
     
     // Base Mossombi
@@ -159,8 +206,21 @@ class TransportProvider extends ChangeNotifier {
     RideNotificationService.showRideNotification(RideStatus.searching);
     notifyListeners();
 
-    _simulationTimer = Timer(const Duration(seconds: 3), () {
-      _matchNearestDriver();
+    _apiClient.dio.post('/taxi/request', data: {
+      'pickup_lat': _pickupLocation?.latitude ?? 0,
+      'pickup_lng': _pickupLocation?.longitude ?? 0,
+      'dropoff_lat': _dropoffLocation!.latitude,
+      'dropoff_lng': _dropoffLocation!.longitude,
+      'ride_type': _rideType == RideType.shared ? 'shared' : 'classic',
+      'has_ac': _hasAC,
+    }).then((response) {
+      if (response.statusCode == 200 && response.data['success'] == true) {
+        _matchNearestDriver();
+      }
+    }).catchError((e) {
+      debugPrint('Error confirming ride: $e');
+      _status = RideStatus.idle;
+      notifyListeners();
     });
   }
 
@@ -168,26 +228,32 @@ class TransportProvider extends ChangeNotifier {
     _status = RideStatus.waitingAcceptance;
     notifyListeners();
 
-    // Trouver le plus proche
-    final dist = const Distance();
-    DriverInfo? closest;
-    double minD = double.infinity;
-
-    for (var d in availableDrivers) {
-      double dKm = dist.as(LengthUnit.Meter, _pickupLocation!, d.position);
-      if (dKm < minD) {
-        minD = dKm;
-        closest = d;
+    _apiClient.dio.post('/taxi/assign', data: {
+      'lat': _pickupLocation?.latitude ?? 0,
+      'lng': _pickupLocation?.longitude ?? 0,
+    }).then((response) {
+      if (response.statusCode == 200 && response.data['success'] == true) {
+        final driverData = response.data['data']?['driver'] ?? response.data['driver'];
+        if (driverData != null) {
+          _assignedDriver = DriverInfo(
+            id: driverData['id']?.toString() ?? '',
+            name: driverData['name']?.toString() ?? 'Chauffeur',
+            carModel: driverData['car_model']?.toString() ?? '',
+            licensePlate: driverData['license_plate']?.toString() ?? '',
+            rating: double.tryParse(driverData['rating']?.toString() ?? '4.5') ?? 4.5,
+            position: LatLng(
+              double.tryParse(driverData['latitude']?.toString() ?? '0') ?? _pickupLocation!.latitude,
+              double.tryParse(driverData['longitude']?.toString() ?? '0') ?? _pickupLocation!.longitude,
+            ),
+          );
+          RideNotificationService.showRideNotification(RideStatus.waitingAcceptance, driverName: _assignedDriver?.name ?? '');
+          _driverAcceptedRide();
+        }
       }
-    }
-
-    _assignedDriver = closest;
-
-    _simulationTimer = Timer(const Duration(seconds: 4), () {
-      if (_status == RideStatus.waitingAcceptance) {
-        RideNotificationService.showRideNotification(RideStatus.waitingAcceptance, driverName: _assignedDriver?.name ?? '');
-        _driverAcceptedRide();
-      }
+    }).catchError((e) {
+      debugPrint('Error assigning driver: $e');
+      _status = RideStatus.idle;
+      notifyListeners();
     });
   }
 
@@ -201,6 +267,7 @@ class TransportProvider extends ChangeNotifier {
   }
 
   void _startLiveTracking() {
+    if (_pickupLocation == null) return;
     _trackingTimer?.cancel();
     _wsSubscription?.cancel();
     
@@ -233,9 +300,9 @@ class TransportProvider extends ChangeNotifier {
   }
 
   void startTrip() {
-    if (_dropoffLocation == null) return;
+    if (_dropoffLocation == null || _currentLocation == null) return;
     _status = RideStatus.inTransit;
-    _etaMinutes = max(1, const Distance().as(LengthUnit.Meter, _currentLocation, _dropoffLocation!) ~/ 400);
+    _etaMinutes = max(1, const Distance().as(LengthUnit.Meter, _currentLocation!, _dropoffLocation!) ~/ 400);
     RideNotificationService.showRideNotification(RideStatus.inTransit, eta: _etaMinutes);
     notifyListeners();
 
@@ -243,7 +310,7 @@ class TransportProvider extends ChangeNotifier {
     _wsSubscription?.cancel();
     
     _wsSubscription = WebSocketService.instance
-        .subscribeToDriverLocation('ride_tracking', _currentLocation, _dropoffLocation!)
+        .subscribeToDriverLocation('ride_tracking', _currentLocation!, _dropoffLocation!)
         .listen((newLocation) {
       if (_status != RideStatus.inTransit) {
         _wsSubscription?.cancel();
@@ -251,9 +318,9 @@ class TransportProvider extends ChangeNotifier {
       }
 
       _currentLocation = newLocation;
-      _assignedDriver?.position = _currentLocation;
+      _assignedDriver?.position = _currentLocation!;
 
-      final distMeters = const Distance().as(LengthUnit.Meter, _currentLocation, _dropoffLocation!);
+      final distMeters = const Distance().as(LengthUnit.Meter, _currentLocation!, _dropoffLocation!);
       if (distMeters < 30) {
         _status = RideStatus.completed;
         RideNotificationService.showRideNotification(RideStatus.completed);

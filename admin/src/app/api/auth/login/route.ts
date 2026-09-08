@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
 
 const AUTH_COOKIE_NAME = process.env.AUTH_COOKIE_NAME || 'admin_access_token';
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:3000/api/v1';
 const DEFAULT_CALLING_CODE = process.env.DEFAULT_CALLING_CODE || '+242';
 
 function normalizeIdentifier(raw: string, callingCode?: string) {
@@ -18,6 +17,14 @@ function normalizeIdentifier(raw: string, callingCode?: string) {
 }
 
 export async function POST(req: Request) {
+  const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL;
+  if (!API_BASE_URL) {
+    return NextResponse.json(
+      { success: false, error: 'NEXT_PUBLIC_API_BASE_URL is not defined in environment variables' },
+      { status: 500 }
+    );
+  }
+
   try {
     const body = await req.json().catch(() => null);
     const identifier = normalizeIdentifier(body?.identifier, body?.callingCode);

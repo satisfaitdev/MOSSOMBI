@@ -12,7 +12,7 @@ class ProductImageHelper {
   ProductImageHelper._();
 
   /// Extracts the server origin from the API base URL.
-  /// e.g. http://192.168.152.94:3000/api/v1 -> http://192.168.152.94:3000
+  /// e.g. http://172.20.10.2:3000/api/v1 -> http://172.20.10.2:3000
   static String get _serverBase {
     final base = ApiConfig.baseUrl;
     try {

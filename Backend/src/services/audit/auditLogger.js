@@ -73,7 +73,7 @@ class AuditLogger {
     } catch (error) {
       logger.error('Erreur flush buffer audit:', error);
       // Remettre les événements dans le buffer en cas d'erreur
-      this.core.logBuffer.unshift(...this.core.logBuffer);
+      this.core.logBuffer.unshift(...eventsToWrite);
     }
   }
 

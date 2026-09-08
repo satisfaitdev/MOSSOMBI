@@ -9,6 +9,7 @@ class DbQuery {
   constructor(table) {
     this.table = table;
     this._select = '*';
+    this._selectExplicit = false;
     this._countHead = false;
     this._filters = [];
     this._or = null;
@@ -23,7 +24,7 @@ class DbQuery {
   // This keeps compatibility with existing code that does not chain `.select()`.
   then(resolve, reject) {
     const run = async () => {
-      if (this._pendingWrite) return this._executeWrite({ returning: false, single: false });
+      if (this._pendingWrite) return this._executeWrite({ returning: this._selectExplicit, single: false });
       return this._runSelect({ single: false });
     };
 
@@ -32,6 +33,7 @@ class DbQuery {
 
   select(columns = '*', options = {}) {
     this._select = columns;
+    this._selectExplicit = true;
     if (options?.head) this._headOnly = true;
     if (options?.count) this._countHead = true;
     return this;

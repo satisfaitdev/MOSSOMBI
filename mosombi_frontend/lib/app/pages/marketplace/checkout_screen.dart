@@ -17,6 +17,7 @@ import 'package:mosombi_frontend/core/theme/app_colors.dart';
 import 'package:mosombi_frontend/core/widgets/animated_gradient_bg.dart';
 import 'package:mosombi_frontend/core/widgets/glass_container.dart';
 import 'package:mosombi_frontend/core/widgets/product_image.dart';
+import 'package:mosombi_frontend/core/widgets/order_success_overlay.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -286,7 +287,11 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
      final matrix = _getEffectiveMatrix(cart);
      final countryData = matrix[_selectedCountry] ?? (matrix.isNotEmpty ? matrix.values.first : {});
      
-     final String cleanOrigin = origin.contains('Local') ? 'Local' : origin.split(' ').first;
+     final bool isLocal = origin.contains('Local') || 
+                          origin.contains('Congo-Brazzaville') || 
+                          origin.contains('Congo Brazza') || 
+                          origin.toLowerCase() == _selectedCountry.toLowerCase();
+     final String cleanOrigin = isLocal ? 'Local' : origin.split(' ').first;
      final sectionData = _getSectionData(countryData, cleanOrigin);
      
      final bool isEnabled = sectionData['enabled'] ?? true;
@@ -388,17 +393,21 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
        voiceNote = _voiceNoteBase64;
 
        if (_saveToBackpack) {
-          _savedAddresses.add({
-             'country': _selectedCountry,
-             'city': _cityCtrl.text.trim(),
-             'street': _streetCtrl.text.trim(),
-             'number': _numberCtrl.text.trim(),
-             'details': _detailsCtrl.text.trim(),
-             'lat': lat,
-             'long': long,
-             'voice_note': voiceNote,
-          });
-          _syncAddresses();
+           final newAddr = {
+              'country': _selectedCountry,
+              'city': _cityCtrl.text.trim(),
+              'street': _streetCtrl.text.trim(),
+              'number': _numberCtrl.text.trim(),
+              'details': _detailsCtrl.text.trim(),
+              'lat': lat,
+              'long': long,
+              'voice_note': voiceNote,
+           };
+           bool exists = _savedAddresses.any((a) => a['city'] == newAddr['city'] && a['street'] == newAddr['street'] && a['number'] == newAddr['number']);
+           if (!exists) {
+              _savedAddresses.add(newAddr);
+              _syncAddresses();
+           }
        }
     }
 
@@ -411,12 +420,28 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
     bool allSuccess = true;
     
     for (var payType in categorized.keys) {
-      for (var origin in categorized[payType]!.keys) {
-        final items = categorized[payType]![origin]!;
+      final itemsByOrigin = <String, List<CartItem>>{};
+      for (var coarseOrigin in categorized[payType]!.keys) {
+        for (var item in categorized[payType]![coarseOrigin]!) {
+          final origin = item.product.origin ?? 'Local';
+          final isLocal = origin.contains('Local') || 
+                          origin.contains('Congo-Brazzaville') || 
+                          origin.contains('Congo Brazza') || 
+                          origin.toLowerCase() == _selectedCountry.toLowerCase();
+          final key = isLocal ? 'Local' : origin;
+          itemsByOrigin.putIfAbsent(key, () => []).add(item);
+        }
+      }
+
+      for (var origin in itemsByOrigin.keys) {
+        final items = itemsByOrigin[origin]!;
         if (items.isEmpty) continue;
 
         final method = _groupDeliveryMethods[origin];
-        if (method == null) continue;
+        if (method == null) {
+          debugPrint('Checkout warning: no delivery method selected for origin $origin');
+          continue;
+        }
         
         final success = await cart.submitSubOrder(
           subItems: items,
@@ -433,40 +458,36 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
       }
     }
 
+    // Dismiss loading spinner
     if (context.mounted) {
       context.pop();
     }
     
     if (allSuccess) {
         if (context.mounted) {
-          showDialog(
-            context: context,
-            barrierDismissible: false,
-            builder: (ctx) => AlertDialog(
-              backgroundColor: Theme.of(context).brightness == Brightness.dark ? const Color(0xFF1E1E2C) : Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-              icon: const Icon(Icons.check_circle_rounded, color: Color(0xFF00E5C5), size: 60),
-              title: const Text('Commande confirmée !', textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.w900)),
-              content: const Text('Vos commandes ont été validées par groupe. Vous pouvez les suivre séparément dans votre historique.', textAlign: TextAlign.center),
-              actions: [
-                Center(
-                  child: ElevatedButton(
-                    onPressed: () {
-                      Navigator.pop(ctx); 
-                      if (context.mounted) {
-                        context.pop(); 
-                        context.pop(); 
-                      }
-                    },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF6C4EF6),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                      padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 12),
-                    ),
-                    child: const Text('Compris', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                  ),
-                ),
-              ],
+          // Show full-screen animated success overlay
+          Navigator.of(context).push(
+            PageRouteBuilder(
+              opaque: true,
+              transitionDuration: const Duration(milliseconds: 500),
+              reverseTransitionDuration: const Duration(milliseconds: 300),
+              pageBuilder: (ctx, anim, secondAnim) {
+                return OrderSuccessOverlay(
+                  onViewOrders: () {
+                    // Pop everything back to home and switch to Orders tab (index 1)
+                    Navigator.of(ctx).popUntil((route) => route.isFirst);
+                    context.go('/home', extra: {'initialTab': 1});
+                  },
+                  onContinueShopping: () {
+                    // Pop everything back to home
+                    Navigator.of(ctx).popUntil((route) => route.isFirst);
+                    context.go('/home');
+                  },
+                );
+              },
+              transitionsBuilder: (ctx, anim, secondAnim, child) {
+                return FadeTransition(opacity: anim, child: child);
+              },
             ),
           );
         }
@@ -614,7 +635,11 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
     final itemsByOrigin = <String, List<CartItem>>{};
     for (var item in [...allCashItems, ...allLoanItems]) {
       final origin = item.product.origin ?? 'Local';
-      final key = origin.contains('Local') ? 'Local' : origin;
+      final isLocal = origin.contains('Local') || 
+                      origin.contains('Congo-Brazzaville') || 
+                      origin.contains('Congo Brazza') || 
+                      origin.toLowerCase() == _selectedCountry.toLowerCase();
+      final key = isLocal ? 'Local' : origin;
       itemsByOrigin.putIfAbsent(key, () => []).add(item);
     }
 
@@ -1686,14 +1711,18 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                       'long': _detectedLong,
                     };
 
+                    int? newIdx;
                     if (save) {
                        // Éviter les doublons
-                       bool exists = _savedAddresses.any((a) => a['city'] == newAddr['city'] && a['street'] == newAddr['street'] && a['number'] == newAddr['number']);
-                       if (!exists) {
+                       int existingIdx = _savedAddresses.indexWhere((a) => a['city'] == newAddr['city'] && a['street'] == newAddr['street'] && a['number'] == newAddr['number']);
+                       if (existingIdx == -1) {
                          setState(() {
                            _savedAddresses.add(newAddr);
                          });
                          _syncAddresses();
+                         newIdx = _savedAddresses.length - 1;
+                       } else {
+                         newIdx = existingIdx;
                        }
                     }
 
@@ -1703,7 +1732,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                       _numberCtrl.text = eNum.text.trim(); 
                       _detailsCtrl.text = eDet.text.trim(); 
                       _saveToBackpack = save; 
-                      _selectedAddressIndex = null; 
+                      _selectedAddressIndex = newIdx; 
                     });
                     Navigator.pop(ctx);
                   },

@@ -9,10 +9,16 @@ import 'core/providers/agency_provider.dart';
 import 'core/providers/product_provider.dart';
 import 'core/providers/cart_provider.dart';
 import 'core/providers/transport_provider.dart';
+import 'core/providers/taxi_driver_provider.dart';
 import 'core/providers/wallet_provider.dart';
 import 'core/providers/notification_provider.dart';
 import 'core/providers/ai_assistant_provider.dart';
 import 'core/providers/network_provider.dart';
+import 'core/providers/food_provider.dart';
+import 'core/providers/digital_services_provider.dart';
+import 'core/providers/smart_city_provider.dart';
+import 'core/providers/travel_provider.dart';
+import 'core/providers/backpack_provider.dart';
 import 'core/services/ride_notification_service.dart';
 import 'core/services/local_cache_service.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -22,7 +28,7 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await dotenv.load(fileName: ".env");
+  await dotenv.load(fileName: "assets/.env");
   
   SystemChrome.setSystemUIOverlayStyle(
     const SystemUiOverlayStyle(
@@ -56,10 +62,16 @@ void main() async {
           ChangeNotifierProvider(create: (_) => ProductProvider()),
           ChangeNotifierProvider(create: (_) => CartProvider()),
           ChangeNotifierProvider(create: (_) => TransportProvider()),
+          ChangeNotifierProvider(create: (_) => TaxiDriverProvider()),
           ChangeNotifierProvider(create: (_) => WalletProvider()),
           ChangeNotifierProvider(create: (_) => NotificationProvider()),
           ChangeNotifierProvider(create: (_) => AiAssistantProvider()),
           ChangeNotifierProvider(create: (_) => NetworkProvider()),
+          ChangeNotifierProvider(create: (_) => FoodProvider()),
+          ChangeNotifierProvider(create: (_) => DigitalServiceProvider()),
+          ChangeNotifierProvider(create: (_) => SmartCityProvider()),
+          ChangeNotifierProvider(create: (_) => TravelProvider()),
+          ChangeNotifierProvider(create: (_) => BackpackProvider()),
         ],
         child: const MossombiApp(),
       ),

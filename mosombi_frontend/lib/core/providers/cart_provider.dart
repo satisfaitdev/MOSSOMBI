@@ -26,7 +26,9 @@ class CartProvider extends ChangeNotifier {
   Map<String, List<CartItem>> get itemsByOrigin {
     final groups = <String, List<CartItem>>{};
     for (var item in _items.values) {
-      final origin = (item.product.origin ?? 'Local').contains('Local') ? 'Local' : 'International';
+      final rawOrigin = item.product.origin ?? 'Local';
+      final isLocal = rawOrigin.contains('Local') || rawOrigin.contains('Congo-Brazzaville') || rawOrigin.contains('Congo Brazza');
+      final origin = isLocal ? 'Local' : 'International';
       if (!groups.containsKey(origin)) groups[origin] = [];
       groups[origin]!.add(item);
     }
@@ -42,7 +44,9 @@ class CartProvider extends ChangeNotifier {
 
      for (var item in _items.values) {
         final payKey = item.wantsLoan ? 'loan' : 'cash';
-        final originKey = (item.product.origin ?? 'Local').contains('Local') ? 'Local' : 'International';
+        final rawOrigin = item.product.origin ?? 'Local';
+        final isLocal = rawOrigin.contains('Local') || rawOrigin.contains('Congo-Brazzaville') || rawOrigin.contains('Congo Brazza');
+        final originKey = isLocal ? 'Local' : 'International';
         result[payKey]![originKey]!.add(item);
      }
      return result;

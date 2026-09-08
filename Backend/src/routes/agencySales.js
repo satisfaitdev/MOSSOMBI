@@ -43,7 +43,7 @@ const serviceIdSchema = Joi.string().trim().min(1).max(64);
 const createSaleSchema = Joi.object({
   service_id: serviceIdSchema.required(),
   amount: Joi.number().min(0).required(),
-  currency: Joi.string().trim().min(1).max(8).default('CDF'),
+  currency: Joi.string().trim().min(1).max(8).default('XAF'),
   client_user_id: Joi.string().guid({ version: 'uuidv4' }).allow(null).optional(),
   client_name: Joi.string().allow('').max(200).optional(),
   client_phone: Joi.string().allow('').max(32).optional(),

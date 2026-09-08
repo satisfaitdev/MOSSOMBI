@@ -43,9 +43,9 @@ class _TransportScreenState extends State<TransportScreen> {
           // Centrer entre le driver et l'utilisateur (Pickup)
           final b = LatLngBounds(transport.pickupLocation!, transport.assignedDriver!.position);
           _mapController.fitCamera(CameraFit.bounds(bounds: b, padding: const EdgeInsets.all(80)));
-        } else if (transport.status == RideStatus.inTransit && transport.dropoffLocation != null) {
+        } else if (transport.status == RideStatus.inTransit && transport.dropoffLocation != null && transport.currentLocation != null) {
           // Centrer entre la voiture (currentLocation) et l'arrivée
-          final b = LatLngBounds(transport.currentLocation, transport.dropoffLocation!);
+          final b = LatLngBounds(transport.currentLocation!, transport.dropoffLocation!);
           _mapController.fitCamera(CameraFit.bounds(bounds: b, padding: const EdgeInsets.all(80)));
         } else if (transport.status == RideStatus.searching) {
           _mapController.move(transport.pickupLocation!, 15.5);
@@ -64,7 +64,7 @@ class _TransportScreenState extends State<TransportScreen> {
           FlutterMap(
             mapController: _mapController,
             options: MapOptions(
-              initialCenter: transport.pickupLocation ?? transport.currentLocation,
+              initialCenter: transport.pickupLocation ?? transport.currentLocation ?? const LatLng(0, 0),
               initialZoom: 15.0,
             ),
             children: [
@@ -75,9 +75,9 @@ class _TransportScreenState extends State<TransportScreen> {
               MarkerLayer(
                 markers: [
                   // L'UTILISATEUR (PICKUP) S'AFFICHE SEULEMENT AVANT LE TRAJET
-                  if (transport.status != RideStatus.inTransit && transport.status != RideStatus.completed)
+                  if (transport.status != RideStatus.inTransit && transport.status != RideStatus.completed && (transport.pickupLocation != null || transport.currentLocation != null))
                     Marker(
-                      point: transport.pickupLocation ?? transport.currentLocation,
+                      point: transport.pickupLocation ?? transport.currentLocation!,
                       width: 60,
                       height: 60,
                       child: _buildPin(Icons.person_pin_circle_rounded, const Color(0xFF6C4EF6)),
@@ -107,7 +107,7 @@ class _TransportScreenState extends State<TransportScreen> {
                   // TAXI ASSIGNÉ EN MOUVEMENT (DRIVER EN ROUTE OU EN TRANSIT)
                   if ((transport.status == RideStatus.driverEnRoute || transport.status == RideStatus.inTransit || transport.status == RideStatus.arrived) && transport.assignedDriver != null)
                     Marker(
-                      point: (transport.status == RideStatus.inTransit || transport.status == RideStatus.completed) ? transport.currentLocation : transport.assignedDriver!.position,
+                      point: (transport.status == RideStatus.inTransit || transport.status == RideStatus.completed) ? (transport.currentLocation ?? transport.assignedDriver!.position) : transport.assignedDriver!.position,
                       width: 60, height: 60,
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
@@ -207,7 +207,7 @@ class _TransportScreenState extends State<TransportScreen> {
                   style: const TextStyle(fontWeight: FontWeight.bold),
                   onSubmitted: (val) {
                     if (val.trim().isNotEmpty) {
-                      transport.selectDropoff(LatLng(transport.currentLocation.latitude - 0.02, transport.currentLocation.longitude + 0.03), val);
+                      if (transport.currentLocation != null) transport.selectDropoff(LatLng(transport.currentLocation!.latitude - 0.02, transport.currentLocation!.longitude + 0.03), val);
                     }
                   },
                 ),

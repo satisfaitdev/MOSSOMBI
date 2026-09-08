@@ -2,9 +2,11 @@ import 'package:flutter/material.dart';
 import '../models/notification_model.dart';
 import 'package:uuid/uuid.dart';
 import 'package:mosombi_frontend/core/services/local_cache_service.dart';
+import 'package:mosombi_frontend/core/network/api_client.dart';
 
 class NotificationProvider extends ChangeNotifier {
   final _uuid = const Uuid();
+  final ApiClient _apiClient = ApiClient();
   List<NotificationModel> _notifications = [];
 
   List<NotificationModel> get notifications => _notifications;
@@ -12,15 +14,43 @@ class NotificationProvider extends ChangeNotifier {
 
   NotificationProvider() {
     _initStorage();
+    fetchNotifications();
   }
 
   void _initStorage() {
     final cachedData = LocalCacheService.instance.getList(LocalCacheService.notificationBox, 'list');
     if (cachedData != null && cachedData.isNotEmpty) {
       _notifications = cachedData.map((e) => NotificationModel.fromJson(e as Map<String, dynamic>)).toList();
-    } else {
-      _loadMockData();
-      _saveToCache();
+    }
+  }
+
+  Future<void> fetchNotifications() async {
+    try {
+      final response = await _apiClient.dio.get('/notifications');
+      if (response.statusCode == 200 && response.data['success'] == true) {
+        final List data = response.data['data'] ?? [];
+        _notifications = data.map((e) => NotificationModel(
+          id: e['id']?.toString() ?? _uuid.v4(),
+          title: e['title']?.toString() ?? '',
+          message: e['message']?.toString() ?? '',
+          date: DateTime.tryParse(e['created_at']?.toString() ?? '') ?? DateTime.now(),
+          category: _parseCategory(e['category']?.toString() ?? ''),
+          isRead: e['is_read'] == true || e['read'] == true,
+        )).toList();
+        _saveToCache();
+        notifyListeners();
+      }
+    } catch (e) {
+      debugPrint('Error fetching notifications: $e');
+    }
+  }
+
+  NotificationCategory _parseCategory(String cat) {
+    switch (cat.toLowerCase()) {
+      case 'transport': return NotificationCategory.transport;
+      case 'marketplace': return NotificationCategory.marketplace;
+      case 'fintech': case 'wallet': return NotificationCategory.fintech;
+      default: return NotificationCategory.system;
     }
   }
 
@@ -32,42 +62,7 @@ class NotificationProvider extends ChangeNotifier {
     );
   }
 
-  void _loadMockData() {
-    final now = DateTime.now();
-    _notifications = [
-      NotificationModel(
-        id: _uuid.v4(),
-        title: 'Chauffeur VTC en route',
-        message: 'Jean (Toyota Yaris) arrive dans 3 min. Tenez-vous prêt au point de départ.',
-        date: now.subtract(const Duration(minutes: 5)),
-        category: NotificationCategory.transport,
-      ),
-      NotificationModel(
-        id: _uuid.v4(),
-        title: 'Recharge réussie',
-        message: 'Votre portefeuille Mossombi a été rechargé de 15 000 FCFA.',
-        date: now.subtract(const Duration(hours: 2)),
-        category: NotificationCategory.fintech,
-      ),
-      NotificationModel(
-        id: _uuid.v4(),
-        title: 'Commande expédiée',
-        message: 'Vos articles Marketplace (#M-8492) ont été expédiés et sont en cours de livraison.',
-        date: now.subtract(const Duration(days: 1)),
-        category: NotificationCategory.marketplace,
-        isRead: true,
-      ),
-      NotificationModel(
-        id: _uuid.v4(),
-        title: 'Bienvenue sur Mossombi !',
-        message: 'Découvrez tous nos services : Transport, Livraison, et Mobile Money.',
-        date: now.subtract(const Duration(days: 3)),
-        category: NotificationCategory.system,
-        isRead: true,
-      ),
-    ];
-    notifyListeners();
-  }
+  // _loadMockData removed; fallback offline uses cache instead
 
   void markAsRead(String id) {
     final index = _notifications.indexWhere((n) => n.id == id);
@@ -75,6 +70,7 @@ class NotificationProvider extends ChangeNotifier {
       _notifications[index] = _notifications[index].copyWith(isRead: true);
       _saveToCache();
       notifyListeners();
+      _apiClient.dio.put('/notifications/$id/read');
     }
   }
 
@@ -84,6 +80,7 @@ class NotificationProvider extends ChangeNotifier {
     }
     _saveToCache();
     notifyListeners();
+    _apiClient.dio.put('/notifications/read-all');
   }
 
   void deleteNotification(String id) {

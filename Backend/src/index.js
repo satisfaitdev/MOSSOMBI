@@ -36,6 +36,7 @@ import adminAgenciesRoutes from './routes/adminAgencies.js';
 import adminCommissionsRoutes from './routes/adminCommissions.js';
 import adsRoutes from './routes/ads.js';
 import agenciesRoutes from './routes/agencies.js';
+import agentsRoutes from './routes/agents.js';
 import agencyServicesRoutes from './routes/agencyServices.js';
 import agencyServicesEnhancedRoutes from './routes/agencyServices-enhanced.js';
 import agencySalesRoutes from './routes/agencySales.js';
@@ -47,6 +48,13 @@ import aiRoutes from './routes/ai.js';
 import deliveriesRoutes from './routes/deliveries.js';
 import disputesRoutes from './routes/disputes.js';
 import logisticsZonesRoutes from './routes/logistics-zones.js';
+import foodRoutes from './routes/food.js';
+import smartCityRoutes from './routes/smart-city.js';
+import billsRoutes from './routes/bills.js';
+import savingsRoutes from './routes/savings.js';
+import cardsRoutes from './routes/cards.js';
+import travelRoutes from './routes/travel.js';
+import digitalServicesRoutes from './routes/digital-services.js';
 
 import { initRealtimeSocket } from './realtime/socket.js';
 
@@ -83,8 +91,8 @@ app.use(cors({
     // Autorise les requêtes sans origin (apps mobiles, curl, Postman)
     if (!origin) return callback(null, true);
     if (allowedOrigins.includes(origin)) return callback(null, true);
-    // En développement, on peut aussi autoriser localhost
-    if (process.env.NODE_ENV === 'development' && /^http:\/\/localhost:/.test(origin)) {
+    // En développement, on autorise toutes les origines pour les tests réseau/téléphone
+    if (process.env.NODE_ENV === 'development') {
       return callback(null, true);
     }
     logger.warn(`CORS blocked origin: ${origin}`);
@@ -182,6 +190,7 @@ app.use(`/api/${API_VERSION}/admin/commissions`, adminCommissionsRoutes);
 app.use(`/api/${API_VERSION}/ads`, adsRoutes);
 app.use(`/api/${API_VERSION}/live-locations`, liveLocationsRoutes);
 app.use(`/api/${API_VERSION}/agencies`, agenciesRoutes);
+app.use(`/api/${API_VERSION}/agents`, agentsRoutes);
 app.use(`/api/${API_VERSION}/agency-services`, agencyServicesRoutes);
 app.use(`/api/${API_VERSION}/agency-services-enhanced`, agencyServicesEnhancedRoutes);
 app.use(`/api/${API_VERSION}/agency-sales`, agencySalesRoutes);
@@ -192,6 +201,13 @@ app.use(`/api/${API_VERSION}/ai`, aiRoutes);
 app.use(`/api/${API_VERSION}/deliveries`, deliveriesRoutes);
 app.use(`/api/${API_VERSION}/disputes`, disputesRoutes);
 app.use(`/api/${API_VERSION}/logistics-zones`, logisticsZonesRoutes);
+app.use(`/api/${API_VERSION}/food`, foodRoutes);
+app.use(`/api/${API_VERSION}/smart-city`, smartCityRoutes);
+app.use(`/api/${API_VERSION}/bills`, billsRoutes);
+app.use(`/api/${API_VERSION}/savings`, savingsRoutes);
+app.use(`/api/${API_VERSION}/cards`, cardsRoutes);
+app.use(`/api/${API_VERSION}/travel`, travelRoutes);
+app.use(`/api/${API_VERSION}/digital-services`, digitalServicesRoutes);
 
 // =====================================================
 // 🚫 GESTION DES ERREURS

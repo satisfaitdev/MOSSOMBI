@@ -35,9 +35,16 @@ const applySchema = Joi.object({
   use_internal_fleet_only: Joi.boolean().default(false).optional(),
 });
 
+const AGENT_ROLES = [
+  'chauffeur', 'livreur', 'agent_controleur', 'controleur_acces',
+  'finance', 'demarcheur', 'revendeur', 'guichetier', 'gestionnaire_stock',
+  'host', 'sub_agent', 'agent',
+];
+
 const joinByUserDisplaySchema = Joi.object({
   user_id_display: Joi.string().trim().min(4).max(32).required(),
   role: Joi.string().valid('agent', 'sub_agent').optional(),
+  role_in_agency: Joi.string().valid(...AGENT_ROLES).optional(),
 });
 
 const membershipActionSchema = Joi.object({
@@ -62,7 +69,7 @@ const createMyServiceRequestSchema = Joi.object({
 const inviteMemberSchema = Joi.object({
   user_id_display: Joi.string().trim().min(4).max(32).required(),
   role: Joi.string().valid('agent', 'sub_agent').optional(),
-  role_in_agency: Joi.string().valid('host', 'sub_agent', 'agent').default('host'),
+  role_in_agency: Joi.string().valid(...AGENT_ROLES).default('host'),
 }).required();
 
 async function getMyAgencyContext(userId) {

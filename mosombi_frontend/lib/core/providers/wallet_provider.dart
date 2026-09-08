@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:uuid/uuid.dart';
 import 'package:mosombi_frontend/core/services/local_cache_service.dart';
-import 'package:mosombi_frontend/core/services/local_cache_service.dart';
 import 'package:mosombi_frontend/core/network/api_client.dart';
 import 'package:mosombi_frontend/core/network/api_config.dart';
 
@@ -107,6 +106,7 @@ class WalletProvider extends ChangeNotifier {
   }
 
   final ApiClient _apiClient = ApiClient();
+  dynamic get dio => _apiClient.dio;
 
   void _initStorage() {
     final cache = LocalCacheService.instance;
@@ -134,7 +134,6 @@ class WalletProvider extends ChangeNotifier {
         final double bal = double.tryParse(data['wallet']?['balance']?.toString() ?? data['points']?.toString() ?? '0') ?? 0.0;
         _balance = bal;
         
-        // Simuler un fetch du savings si non supporté nativement
         final double savBal = double.tryParse(data['wallet']?['savings_balance']?.toString() ?? '0') ?? 0.0;
         _savingsBalance = savBal;
 
@@ -161,18 +160,7 @@ class WalletProvider extends ChangeNotifier {
     );
   }
 
-  final List<VirtualCard> _cards = [
-    VirtualCard(
-      id: 'card_1',
-      label: 'Mossombi Visa',
-      maskedNumber: '**** **** **** 4092',
-      expiry: '12/28',
-      holderName: 'Utilisateur',
-      type: 'VISA',
-      gradient: [const Color(0xFF1E1E2C), const Color(0xFF2D2D44)],
-      balance: 40000,
-    ),
-  ];
+  List<VirtualCard> _cards = [];
 
   double get balance => _balance;
   double get savingsBalance => _savingsBalance;
@@ -186,19 +174,16 @@ class WalletProvider extends ChangeNotifier {
   Future<bool> depositToSavings(double amount) async {
     if (_balance < amount) return false;
     try {
-      final response = await _apiClient.dio.post(ApiConfig.createTransaction, data: {
-        'type': 'savings_deposit',
+      final response = await _apiClient.dio.post(ApiConfig.savingsDeposit, data: {
         'amount': amount,
-        'description': 'Transfert vers compte Épargne'
       });
       if (response.statusCode == 200 && response.data['success']) {
         _balance -= amount;
         _savingsBalance += amount;
-        final tx = AppTransaction.fromJson(response.data['data']['transaction']);
-        _transactions.insert(0, tx);
-        latestUnanimatedTx = tx;
         _saveToCache();
         notifyListeners();
+        fetchSavingsBalance();
+        fetchWalletData();
         return true;
       }
     } catch (e) {
@@ -210,19 +195,16 @@ class WalletProvider extends ChangeNotifier {
   Future<bool> withdrawFromSavings(double amount) async {
     if (_savingsBalance < amount) return false;
     try {
-      final response = await _apiClient.dio.post(ApiConfig.createTransaction, data: {
-        'type': 'savings_withdraw',
+      final response = await _apiClient.dio.post(ApiConfig.savingsWithdraw, data: {
         'amount': amount,
-        'description': 'Retrait depuis le compte Épargne'
       });
       if (response.statusCode == 200 && response.data['success']) {
         _savingsBalance -= amount;
         _balance += amount;
-        final tx = AppTransaction.fromJson(response.data['data']['transaction']);
-        _transactions.insert(0, tx);
-        latestUnanimatedTx = tx;
         _saveToCache();
         notifyListeners();
+        fetchSavingsBalance();
+        fetchWalletData();
         return true;
       }
     } catch (e) {
@@ -346,28 +328,79 @@ class WalletProvider extends ChangeNotifier {
     return false;
   }
 
-  Future<bool> payBill(double amount, String billTitle) async {
+  List<Map<String, dynamic>> _billProviders = [];
+  List<Map<String, dynamic>> get billProviders => _billProviders;
+
+  Future<void> fetchBillsProviders() async {
+    try {
+      final response = await _apiClient.dio.get(ApiConfig.billProviders);
+      if (response.statusCode == 200 && response.data['success']) {
+        _billProviders = List<Map<String, dynamic>>.from(response.data['data']['providers'] ?? []);
+        notifyListeners();
+      }
+    } catch (e) {
+      debugPrint('FetchBillsProviders Error: $e');
+    }
+  }
+
+  Future<bool> payBill(double amount, String provider, String customerRef) async {
     if (_balance < amount) return false;
     try {
-      final response = await _apiClient.dio.post(ApiConfig.createTransaction, data: {
-        'type': 'bill_payment',
+      final response = await _apiClient.dio.post(ApiConfig.billPay, data: {
+        'provider': provider,
+        'customer_ref': customerRef,
         'amount': amount,
-        'description': 'Facture: $billTitle',
       });
       if (response.statusCode == 200 && response.data['success']) {
         _balance -= amount;
-        final tx = AppTransaction.fromJson(response.data['data']['transaction']);
-        _transactions.insert(0, tx);
-        latestUnanimatedTx = tx;
-        _saveToCache();
-        notifyListeners();
         fetchWalletData();
+        notifyListeners();
         return true;
       }
     } catch (e) {
       debugPrint('PayBill Error: $e');
     }
     return false;
+  }
+
+  Future<void> fetchSavingsBalance() async {
+    try {
+      final response = await _apiClient.dio.get(ApiConfig.savingsBalance);
+      if (response.statusCode == 200 && response.data['success']) {
+        _savingsBalance = double.tryParse(response.data['data']['balance']?.toString() ?? '0') ?? 0.0;
+        notifyListeners();
+      }
+    } catch (e) {
+      debugPrint('FetchSavingsBalance Error: $e');
+    }
+  }
+
+  Future<void> fetchCards() async {
+    try {
+      final response = await _apiClient.dio.get(ApiConfig.cardsList);
+      if (response.statusCode == 200 && response.data['success']) {
+        final List cardsData = response.data['data']['cards'] ?? [];
+        _cards = cardsData.map((c) {
+          final brand = c['brand'] as String? ?? 'VISA';
+          return VirtualCard(
+            id: c['id']?.toString() ?? '',
+            label: c['label']?.toString() ?? 'Ma Carte',
+            maskedNumber: c['card_number_mask']?.toString() ?? '**** **** **** 0000',
+            expiry: c['expiry']?.toString() ?? '00/00',
+            holderName: 'Utilisateur',
+            type: brand,
+            gradient: brand == 'VISA'
+                ? [const Color(0xFF1E1E2C), const Color(0xFF2D2D44)]
+                : [const Color(0xFF0A2463), const Color(0xFF1B4F72)],
+            balance: double.tryParse(c['balance']?.toString() ?? '0') ?? 0.0,
+            isLocked: c['status'] == 'frozen',
+          );
+        }).toList();
+        notifyListeners();
+      }
+    } catch (e) {
+      debugPrint('FetchCards Error: $e');
+    }
   }
 
   Future<bool> payForMarketplaceService(double amount, String description) async {
@@ -431,7 +464,7 @@ class WalletProvider extends ChangeNotifier {
        if (response.statusCode == 200 && response.data['success']) {
          fetchWalletData();
        }
-    }).catchError((e) => debugPrint('PayForService API Error: $e'));
+    }, onError: (e) => debugPrint('PayForService API Error: $e'));
 
     _balance -= amount;
     final tx = AppTransaction(
@@ -444,46 +477,68 @@ class WalletProvider extends ChangeNotifier {
     );
     _transactions.insert(0, tx);
     latestUnanimatedTx = tx;
-    _simulateLedgerSplit(amount, type);
     notifyListeners();
     return true;
   }
 
-  VirtualCard createCard(String label, String type) {
-    final last4 = (1000 + DateTime.now().millisecondsSinceEpoch % 9000).toString();
-    final card = VirtualCard(
-      id: _uuid.v4(),
-      label: label,
-      maskedNumber: '**** **** **** $last4',
-      expiry: '${DateTime.now().month.toString().padLeft(2, '0')}/${(DateTime.now().year + 3) % 100}',
-      holderName: 'Utilisateur',
-      type: type,
-      gradient: type == 'VISA'
-          ? [const Color(0xFF1E1E2C), const Color(0xFF2D2D44)]
-          : [const Color(0xFF0A2463), const Color(0xFF1B4F72)],
-      balance: 0,
-    );
-    _cards.add(card);
-    notifyListeners();
-    return card;
-  }
-
-  void toggleCardLock(String cardId) {
-    final idx = _cards.indexWhere((c) => c.id == cardId);
-    if (idx != -1) {
-      _cards[idx].isLocked = !_cards[idx].isLocked;
-      notifyListeners();
+  Future<VirtualCard?> createVirtualCard(String label, String brand) async {
+    try {
+      final response = await _apiClient.dio.post(ApiConfig.cardsCreate, data: {
+        'label': label,
+        'brand': brand,
+      });
+      if (response.statusCode == 200 && response.data['success']) {
+        await fetchCards();
+        return _cards.isNotEmpty ? _cards.first : null;
+      }
+    } catch (e) {
+      debugPrint('CreateCard Error: $e');
     }
+    return null;
   }
 
-  void deleteCard(String cardId) {
-    _cards.removeWhere((c) => c.id == cardId);
-    notifyListeners();
-  }
-
-  void _simulateLedgerSplit(double amount, TransactionType type) {
-    if (type == TransactionType.ridePayment) {
-      debugPrint('💰 [LEDGER] Course: ${amount.toStringAsFixed(0)} FCFA → Chauffeur: ${(amount * 0.8).toStringAsFixed(0)} | Mossombi: ${(amount * 0.2).toStringAsFixed(0)}');
+  Future<bool> toggleCardLock(String cardId) async {
+    try {
+      final response = await _apiClient.dio.patch('${ApiConfig.cardsFreeze}/$cardId/freeze');
+      if (response.statusCode == 200 && response.data['success']) {
+        await fetchCards();
+        return true;
+      }
+    } catch (e) {
+      debugPrint('ToggleCardLock Error: $e');
     }
+    return false;
+  }
+
+  Future<bool> deleteCard(String cardId) async {
+    try {
+      final response = await _apiClient.dio.delete('${ApiConfig.cardsDelete}/$cardId');
+      if (response.statusCode == 200 && response.data['success']) {
+        await fetchCards();
+        return true;
+      }
+    } catch (e) {
+      debugPrint('DeleteCard Error: $e');
+    }
+    return false;
+  }
+
+  Future<bool> cashInAgent(String clientPhone, double amount, {String? clientUserId}) async {
+    try {
+      final response = await _apiClient.dio.post(ApiConfig.agentCashIn, data: {
+        'client_phone': clientPhone,
+        if (clientUserId != null) 'client_user_id': clientUserId,
+        'amount': amount,
+      });
+      if (response.statusCode == 200 && response.data['success']) {
+        _balance -= amount;
+        fetchWalletData();
+        notifyListeners();
+        return true;
+      }
+    } catch (e) {
+      debugPrint('CashInAgent Error: $e');
+    }
+    return false;
   }
 }

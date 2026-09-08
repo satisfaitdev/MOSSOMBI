@@ -128,7 +128,7 @@ function roomKeyForUser(userId) {
 
 function assertDriver(req) {
   const role = String(req.user?.role || '');
-  if (!['agent', 'super_admin'].includes(role)) {
+  if (!['agent', 'super_admin', 'taxi_driver'].includes(role)) {
     throw new ValidationError('Accès refusé');
   }
 }
@@ -640,6 +640,329 @@ router.post('/rides/:id/status', asyncHandler(async (req, res) => {
   }
 
   return res.json({ success: true, data: updated.data });
+}));
+
+// ──────────────────────────────────────────────
+//  TAXI DRIVER ENDPOINTS
+// ──────────────────────────────────────────────
+
+// GET /api/v1/taxi/driver/requests
+router.get('/driver/requests', asyncHandler(async (req, res) => {
+  assertDriver(req);
+
+  const sql = `
+    SELECT tr.*,
+      ST_Distance(
+        ll.location,
+        ST_SetSRID(ST_MakePoint(tr.pickup_lng, tr.pickup_lat), 4326)::geography
+      ) AS distance_m
+    FROM public.taxi_rides tr
+    LEFT JOIN public.live_locations ll ON ll.user_id = $1 AND ll.service_id = 'taxi'
+    WHERE tr.status = 'requested'
+      AND tr.driver_user_id IS NULL
+    ORDER BY tr.created_at DESC
+    LIMIT 20
+  `;
+
+  const rows = await appDataSource.query(sql, [req.user.id]);
+  return res.json({ success: true, data: rows || [] });
+}));
+
+// POST /api/v1/taxi/driver/accept
+router.post('/driver/accept', asyncHandler(async (req, res) => {
+  assertDriver(req);
+
+  const { ride_id } = req.body;
+  if (!ride_id) throw new ValidationError('ride_id requis');
+
+  const { data: existing, error: exErr } = await dbAdmin
+    .from('taxi_rides')
+    .select('*')
+    .eq('id', ride_id)
+    .single();
+
+  if (exErr || !existing) throw new ValidationError('Course introuvable');
+  if (String(existing.status || '') !== 'requested') throw new ValidationError('Course déjà prise');
+
+  const now = new Date().toISOString();
+  const updated = await dbAdmin
+    .from('taxi_rides')
+    .update({ driver_user_id: req.user.id, status: 'assigned', updated_at: now })
+    .eq('id', ride_id)
+    .selectAndReturnSingle();
+
+  if (updated?.error || !updated?.data) throw new ValidationError('Erreur acceptation');
+
+  try {
+    await dbAdmin.from('taxi_ride_events').insert({
+      id: crypto.randomUUID(),
+      ride_id,
+      type: 'ride_accepted',
+      payload: { driver_user_id: req.user.id },
+      created_at: now,
+    });
+  } catch { /* ignore */ }
+
+  try {
+    await dbAdmin
+      .from('live_locations')
+      .update({ is_busy: true, updated_at: now })
+      .eq('user_id', req.user.id);
+  } catch { /* ignore */ }
+
+  try {
+    const io = getIO();
+    io?.to(roomKeyForUser(updated.data.client_user_id))?.emit('taxi:ride:updated', updated.data);
+    io?.to(roomKeyForUser(updated.data.driver_user_id))?.emit('taxi:ride:updated', updated.data);
+  } catch { /* ignore */ }
+
+  return res.json({ success: true, data: updated.data });
+}));
+
+// POST /api/v1/taxi/driver/reject
+router.post('/driver/reject', asyncHandler(async (req, res) => {
+  assertDriver(req);
+
+  const { ride_id } = req.body;
+  if (!ride_id) throw new ValidationError('ride_id requis');
+
+  const { data: existing, error: exErr } = await dbAdmin
+    .from('taxi_rides')
+    .select('*')
+    .eq('id', ride_id)
+    .single();
+
+  if (exErr || !existing) throw new ValidationError('Course introuvable');
+  if (String(existing.status || '') !== 'requested') throw new ValidationError('Course déjà prise');
+
+  const now = new Date().toISOString();
+
+  try {
+    await dbAdmin.from('taxi_ride_events').insert({
+      id: crypto.randomUUID(),
+      ride_id,
+      type: 'ride_declined',
+      payload: { driver_user_id: req.user.id },
+      created_at: now,
+    });
+  } catch { /* ignore */ }
+
+  return res.json({ success: true, data: { ride_id, status: 'declined' } });
+}));
+
+// POST /api/v1/taxi/driver/start
+router.post('/driver/start', asyncHandler(async (req, res) => {
+  assertDriver(req);
+
+  const { ride_id } = req.body;
+  if (!ride_id) throw new ValidationError('ride_id requis');
+
+  const { data: existing, error: exErr } = await dbAdmin
+    .from('taxi_rides')
+    .select('*')
+    .eq('id', ride_id)
+    .single();
+
+  if (exErr || !existing) throw new ValidationError('Course introuvable');
+  if (String(existing.driver_user_id || '') !== String(req.user.id)) throw new ValidationError('Accès refusé');
+
+  const now = new Date().toISOString();
+  const updated = await dbAdmin
+    .from('taxi_rides')
+    .update({ status: 'started', updated_at: now })
+    .eq('id', ride_id)
+    .selectAndReturnSingle();
+
+  if (updated?.error || !updated?.data) throw new ValidationError('Erreur début course');
+
+  try {
+    await dbAdmin.from('taxi_ride_events').insert({
+      id: crypto.randomUUID(),
+      ride_id,
+      type: 'ride_started',
+      payload: { driver_user_id: req.user.id },
+      created_at: now,
+    });
+  } catch { /* ignore */ }
+
+  try {
+    const io = getIO();
+    io?.to(roomKeyForUser(updated.data.client_user_id))?.emit('taxi:ride:updated', updated.data);
+    io?.to(roomKeyForUser(updated.data.driver_user_id))?.emit('taxi:ride:updated', updated.data);
+  } catch { /* ignore */ }
+
+  return res.json({ success: true, data: updated.data });
+}));
+
+// POST /api/v1/taxi/driver/complete
+router.post('/driver/complete', asyncHandler(async (req, res) => {
+  assertDriver(req);
+
+  const { ride_id } = req.body;
+  if (!ride_id) throw new ValidationError('ride_id requis');
+
+  const { data: existing, error: exErr } = await dbAdmin
+    .from('taxi_rides')
+    .select('*')
+    .eq('id', ride_id)
+    .single();
+
+  if (exErr || !existing) throw new ValidationError('Course introuvable');
+  if (String(existing.driver_user_id || '') !== String(req.user.id)) throw new ValidationError('Accès refusé');
+
+  const now = new Date().toISOString();
+  const finalPrice = existing.estimated_price || 0;
+  const updated = await dbAdmin
+    .from('taxi_rides')
+    .update({ status: 'completed', final_price: finalPrice, updated_at: now })
+    .eq('id', ride_id)
+    .selectAndReturnSingle();
+
+  if (updated?.error || !updated?.data) throw new ValidationError('Erreur fin course');
+
+  try {
+    await dbAdmin.from('taxi_ride_events').insert({
+      id: crypto.randomUUID(),
+      ride_id,
+      type: 'ride_completed',
+      payload: { driver_user_id: req.user.id, final_price: finalPrice },
+      created_at: now,
+    });
+  } catch { /* ignore */ }
+
+  try {
+    await dbAdmin
+      .from('live_locations')
+      .update({ is_busy: false, updated_at: now })
+      .eq('user_id', req.user.id);
+  } catch { /* ignore */ }
+
+  try {
+    const io = getIO();
+    io?.to(roomKeyForUser(updated.data.client_user_id))?.emit('taxi:ride:updated', updated.data);
+    io?.to(roomKeyForUser(updated.data.driver_user_id))?.emit('taxi:ride:updated', updated.data);
+  } catch { /* ignore */ }
+
+  return res.json({ success: true, data: updated.data });
+}));
+
+// GET /api/v1/taxi/driver/earnings
+router.get('/driver/earnings', asyncHandler(async (req, res) => {
+  assertDriver(req);
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  const earningsToday = await appDataSource.query(`
+    SELECT COALESCE(SUM(final_price), 0) AS total
+    FROM public.taxi_rides
+    WHERE driver_user_id = $1
+      AND status = 'completed'
+      AND updated_at >= $2
+  `, [req.user.id, today.toISOString()]);
+
+  const totalEarnings = await appDataSource.query(`
+    SELECT COALESCE(SUM(final_price), 0) AS total,
+           COUNT(*) AS ride_count
+    FROM public.taxi_rides
+    WHERE driver_user_id = $1
+      AND status = 'completed'
+  `, [req.user.id]);
+
+  const recentRides = await appDataSource.query(`
+    SELECT id, pickup_address, dropoff_address, final_price, estimated_price, status, created_at, updated_at
+    FROM public.taxi_rides
+    WHERE driver_user_id = $1
+    ORDER BY created_at DESC
+    LIMIT 50
+  `, [req.user.id]);
+
+  return res.json({
+    success: true,
+    data: {
+      today: Number(earningsToday[0]?.total || 0),
+      total: Number(totalEarnings[0]?.total || 0),
+      ride_count: Number(totalEarnings[0]?.ride_count || 0),
+      recent_rides: recentRides || [],
+    },
+  });
+}));
+
+// ──────────────────────────────────────────────
+//  TAXI SUBSCRIPTION ENDPOINTS
+// ──────────────────────────────────────────────
+
+// GET /api/v1/taxi/plans
+router.get('/plans', asyncHandler(async (req, res) => {
+  const rows = await appDataSource.query(`
+    SELECT * FROM public.taxi_plans WHERE is_active = true ORDER BY price ASC
+  `);
+  return res.json({ success: true, data: rows || [] });
+}));
+
+// POST /api/v1/taxi/subscriptions
+router.post('/subscriptions', asyncHandler(async (req, res) => {
+  const { plan_id, pickup_lat, pickup_lng, dropoff_lat, dropoff_lng, pickup_address, dropoff_address, schedule } = req.body;
+  if (!plan_id) throw new ValidationError('plan_id requis');
+
+  const [plan] = await appDataSource.query(`
+    SELECT * FROM public.taxi_plans WHERE id = $1 AND is_active = true
+  `, [plan_id]);
+
+  if (!plan) throw new ValidationError('Plan introuvable ou inactif');
+
+  const now = new Date();
+  const periodEnd = new Date(now);
+  const durationDays = plan.metadata?.duration_days || 30;
+  periodEnd.setDate(periodEnd.getDate() + durationDays);
+
+  const subscription = {
+    id: crypto.randomUUID(),
+    user_id: req.user.id,
+    plan_id,
+    status: 'active',
+    current_period_start: now.toISOString(),
+    current_period_end: periodEnd.toISOString(),
+    rides_used_today: 0,
+    last_usage_day: null,
+    metadata: {
+      pickup_lat,
+      pickup_lng,
+      dropoff_lat,
+      dropoff_lng,
+      pickup_address: pickup_address || '',
+      dropoff_address: dropoff_address || '',
+      schedule: schedule || {},
+    },
+    created_at: now.toISOString(),
+    updated_at: now.toISOString(),
+  };
+
+  await appDataSource.query(`
+    INSERT INTO public.taxi_subscriptions (id, user_id, plan_id, status, current_period_start, current_period_end, rides_used_today, last_usage_day, metadata, created_at, updated_at)
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+  `, [
+    subscription.id, subscription.user_id, subscription.plan_id,
+    subscription.status, subscription.current_period_start,
+    subscription.current_period_end, subscription.rides_used_today,
+    subscription.last_usage_day, JSON.stringify(subscription.metadata),
+    subscription.created_at, subscription.updated_at,
+  ]);
+
+  return res.status(201).json({ success: true, data: subscription });
+}));
+
+// GET /api/v1/taxi/subscriptions
+router.get('/subscriptions', asyncHandler(async (req, res) => {
+  const rows = await appDataSource.query(`
+    SELECT s.*, p.name AS plan_name, p.code AS plan_code, p.price AS plan_price, p.rides_per_day
+    FROM public.taxi_subscriptions s
+    LEFT JOIN public.taxi_plans p ON p.id = s.plan_id
+    WHERE s.user_id = $1
+    ORDER BY s.created_at DESC
+  `, [req.user.id]);
+
+  return res.json({ success: true, data: rows || [] });
 }));
 
 export default router;

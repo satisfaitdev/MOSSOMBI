@@ -29,7 +29,7 @@ class AgencySale {
       agencyId: json['agency_id'] as String? ?? '',
       serviceId: json['service_id'] as String? ?? '',
       amount: double.tryParse(json['amount']?.toString() ?? '0') ?? 0.0,
-      currency: json['currency'] as String? ?? 'CDF',
+      currency: json['currency'] as String? ?? 'XAF',
       clientName: json['client_name'] as String? ?? '',
       clientPhone: json['client_phone'] as String? ?? '',
       commissionAmount: json['commission_amount'] != null ? double.tryParse(json['commission_amount'].toString()) : null,

@@ -26,11 +26,10 @@ router.post('/enhance', async (req, res, next) => {
     const geminiToken = process.env.GEMINI_API_KEY;
 
     let optimizedImageUrls = [...imageList]; 
-    let generatedVideoUrl = 'https://www.w3schools.com/html/mov_bbb.mp4'; // Placeholder vidéo 3D Spin
+    let generatedVideoUrl = null;
     let usedModel = 'Mock-Model-v2';
 
     if (geminiToken) {
-      // 🚀 PRODUCTION MODE: Gemini API Key detectée !
       logger.info(`[AI] Clé Gemini API détectée ! Appel à Imagen 3 et Veo...`);
       
       // 1. Image Generation via gemini-2.5-flash-image
@@ -48,12 +47,28 @@ router.post('/enhance', async (req, res, next) => {
       });
       
       // 2. Veo (Video Generation) : Interpolation 3D "Objet rotatif"
-      logger.info("[AI] Requête REST envoyée vers Veo (veo-3.1-lite-generate-preview) - En attente via Mock");
-      // Pour l'instant, Veo nécessite du "long polling" (attente asynchrone) non géré facilement dans une route Express synchrone, on mock la vidéo.
-      const veoResponse = { data: { output: 'https://www.w3schools.com/html/mov_bbb.mp4' } };
+      // Veo nécessite un long polling (opération asynchrone). On tente l'appel, fallback si échec.
+      try {
+        logger.info("[AI] Requête REST envoyée vers Veo (veo-3.1-lite-generate-preview)...");
+        const veoResponse = await axios.post(
+          `https://generativelanguage.googleapis.com/v1beta/models/veo-3.1-lite-generate-preview:generateContent?key=${geminiToken}`,
+          {
+            contents: [{ role: "user", parts: [{ text: `Générer une vidéo 3D tournante de: ${prompt || 'objet'}` }] }],
+            generationConfig: { responseModalities: ["VIDEO"] }
+          },
+          { timeout: 30000 }
+        );
+        if (veoResponse.data?.candidates?.[0]?.content?.parts) {
+          const videoPart = veoResponse.data.candidates[0].content.parts.find(p => p.inlineData?.mimeType?.startsWith('video/'));
+          if (videoPart?.inlineData?.data) {
+            generatedVideoUrl = `data:${videoPart.inlineData.mimeType};base64,${videoPart.inlineData.data}`;
+          }
+        }
+      } catch (veoErr) {
+        logger.warn(`[AI] Veo non disponible (${veoErr.message}), vidéo non générée`);
+      }
       
       let base64Image = null;
-      // Parsing de la réponse propre à Gemini-2.5-flash-image
       if (imagenResponse.data?.candidates?.[0]?.content?.parts) {
           const parts = imagenResponse.data.candidates[0].content.parts;
           const imagePart = parts.find(p => p.inlineData);
@@ -63,12 +78,9 @@ router.post('/enhance', async (req, res, next) => {
       }
 
       optimizedImageUrls = base64Image ? [base64Image] : [...imageList];
-      generatedVideoUrl = veoResponse.data.output;
-      
-      usedModel = 'Gemini-Imagen3 (Veo Mocked)';
+      usedModel = 'Gemini-Imagen3 (Veo ' + (generatedVideoUrl ? 'OK' : 'N/A') + ')';
     } else {
-      // 🧪 DEVELOPMENT MODE
-      logger.warn(`[AI] Aucune clé (GEMINI_API_KEY) ! Utilisation du mode Simulation Google AI.`);
+      logger.warn(`[AI] Aucune clé (GEMINI_API_KEY) ! Utilisation du mode simulation.`);
       await new Promise(resolve => setTimeout(resolve, 3500));
     }
 
@@ -132,27 +144,38 @@ Réponds UNIQUEMENT au format JSON strict avec des nombres :
       }
     }
 
-    // Fallback Mock response
+    // Fallback : estimation basée sur le nom et la description (analyse lexicale simple)
     let weight_kg = 1.0;
     let volume_cbm = 0.01;
-    const lowerName = name.toLowerCase();
-    if (lowerName.includes('téléphone') || lowerName.includes('phone') || lowerName.includes('smartphone')) {
-      weight_kg = 0.3; volume_cbm = 0.001;
-    } else if (lowerName.includes('ordinateur') || lowerName.includes('laptop') || lowerName.includes('macbook')) {
-      weight_kg = 2.5; volume_cbm = 0.015;
-    } else if (lowerName.includes('chaussure') || lowerName.includes('basket')) {
-      weight_kg = 1.2; volume_cbm = 0.005;
-    } else if (lowerName.includes('t-shirt') || lowerName.includes('chemise') || lowerName.includes('vêtement')) {
-      weight_kg = 0.2; volume_cbm = 0.002;
-    } else if (lowerName.includes('frigo') || lowerName.includes('réfrigérateur')) {
-      weight_kg = 60.0; volume_cbm = 0.8;
+    const text = `${name} ${description || ''}`.toLowerCase();
+
+    // Catégories avec poids/volume estimés
+    const categories = [
+      { keywords: ['téléphone', 'phone', 'smartphone', 'iphone', 'samsung', 'xiaomi'], weight: 0.3, volume: 0.001 },
+      { keywords: ['ordinateur', 'laptop', 'macbook', 'pc', 'ecran', 'moniteur'], weight: 2.5, volume: 0.015 },
+      { keywords: ['tablette', 'ipad'], weight: 0.5, volume: 0.002 },
+      { keywords: ['chaussure', 'basket', 'sneaker', 'sandale'], weight: 1.2, volume: 0.005 },
+      { keywords: ['t-shirt', 'chemise', 'vêtement', 'pantalon', 'jean', 'robe', 'veste'], weight: 0.2, volume: 0.002 },
+      { keywords: ['livre', 'roman', 'manuel'], weight: 0.5, volume: 0.003 },
+      { keywords: ['frigo', 'réfrigérateur', 'congélateur'], weight: 60.0, volume: 0.8 },
+      { keywords: ['tv', 'télévision', 'home cinema', 'enceinte'], weight: 8.0, volume: 0.1 },
+      { keywords: ['lit', 'canapé', 'meuble', 'table', 'chaise', 'armoire'], weight: 25.0, volume: 0.5 },
+      { keywords: ['vélo', 'bicyclette'], weight: 15.0, volume: 0.3 },
+    ];
+
+    for (const cat of categories) {
+      if (cat.keywords.some(kw => text.includes(kw))) {
+        weight_kg = cat.weight;
+        volume_cbm = cat.volume;
+        break;
+      }
     }
 
     return res.json({
       success: true,
       data: { weight_kg, volume_cbm },
       aiUsed: false,
-      message: geminiToken ? "Fallback mock utilisé" : "Mode simulation (Pas de clé API)"
+      message: geminiToken ? "Fallback (clé API sans réponse IA valide)" : "Mode simulation (pas de clé API)"
     });
 
   } catch (error) {

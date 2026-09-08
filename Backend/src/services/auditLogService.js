@@ -8,6 +8,7 @@ import fs from 'fs/promises';
 import path from 'path';
 import { logger } from '../utils/logger.js';
 import { dbAdmin } from '../config/db.js';
+import { appDataSource } from '../db/dataSource.js';
 
 class AuditLogService {
   constructor() {
@@ -308,11 +309,11 @@ class AuditLogService {
       category: this.eventCategories.FINANCIAL,
       action: `transaction_${transactionType}`,
       severity,
-      description: `Transaction ${transactionType} de ${amount} CDF`,
+      description: `Transaction ${transactionType} de ${amount} FCFA`,
       userId,
       businessData: { 
         amount, 
-        currency: 'CDF',
+        currency: 'XAF',
         transactionType 
       },
       ...details
@@ -670,15 +671,110 @@ class AuditLogService {
    * Rechercher dans les logs d'audit
    */
   async searchAuditLogs(criteria = {}) {
-    // Cette méthode nécessiterait une base de données pour être efficace
-    // En production, utiliser Elasticsearch ou une base de données dédiée
-    
+    const {
+      searchText,
+      startDate,
+      endDate,
+      severity,
+      category,
+      userId,
+      action,
+      limit = 100,
+      offset = 0
+    } = criteria;
+
     logger.info('Recherche dans les logs d\'audit', { criteria });
-    
-    return {
-      message: 'Recherche non implémentée - utiliser une base de données dédiée en production',
-      criteria
-    };
+
+    try {
+      let query = `
+        SELECT * FROM audit_events WHERE 1=1
+      `;
+      const params = [];
+      let idx = 1;
+
+      if (searchText) {
+        query += ` AND (description ILIKE $${idx} OR action ILIKE $${idx} OR error_message ILIKE $${idx})`;
+        params.push(`%${searchText}%`);
+        idx++;
+      }
+
+      if (startDate) {
+        query += ` AND timestamp >= $${idx}`;
+        params.push(startDate);
+        idx++;
+      }
+
+      if (endDate) {
+        query += ` AND timestamp <= $${idx}`;
+        params.push(endDate);
+        idx++;
+      }
+
+      if (severity) {
+        const severities = Array.isArray(severity) ? severity : [severity];
+        query += ` AND severity = ANY($${idx})`;
+        params.push(severities);
+        idx++;
+      }
+
+      if (category) {
+        query += ` AND category = $${idx}`;
+        params.push(category);
+        idx++;
+      }
+
+      if (userId) {
+        query += ` AND user_id = $${idx}`;
+        params.push(userId);
+        idx++;
+      }
+
+      if (action) {
+        query += ` AND action ILIKE $${idx}`;
+        params.push(`%${action}%`);
+        idx++;
+      }
+
+      query += ` ORDER BY timestamp DESC LIMIT $${idx} OFFSET $${idx + 1}`;
+      params.push(limit, offset);
+
+      const rows = await appDataSource.query(query, params);
+
+      // Compter le total pour la pagination
+      let countQuery = `
+        SELECT COUNT(*) as total FROM audit_events WHERE 1=1
+      `;
+      // On réutilise les mêmes conditions mais sans LIMIT/OFFSET
+      let countIdx = 1;
+      const countParams = [];
+
+      if (searchText) {
+        countQuery += ` AND (description ILIKE $${countIdx} OR action ILIKE $${countIdx} OR error_message ILIKE $${countIdx})`;
+        countParams.push(`%${searchText}%`);
+        countIdx++;
+      }
+      if (startDate) { countQuery += ` AND timestamp >= $${countIdx}`; countParams.push(startDate); countIdx++; }
+      if (endDate) { countQuery += ` AND timestamp <= $${countIdx}`; countParams.push(endDate); countIdx++; }
+      if (severity) { const sv = Array.isArray(severity) ? severity : [severity]; countQuery += ` AND severity = ANY($${countIdx})`; countParams.push(sv); countIdx++; }
+      if (category) { countQuery += ` AND category = $${countIdx}`; countParams.push(category); countIdx++; }
+      if (userId) { countQuery += ` AND user_id = $${countIdx}`; countParams.push(userId); countIdx++; }
+      if (action) { countQuery += ` AND action ILIKE $${countIdx}`; countParams.push(`%${action}%`); countIdx++; }
+
+      const countResult = await appDataSource.query(countQuery, countParams);
+      const total = parseInt(countResult[0]?.total || 0, 10);
+
+      return {
+        data: rows || [],
+        total,
+        limit,
+        offset,
+        criteria
+      };
+
+    } catch (error) {
+      logger.error('Erreur recherche audit logs: ' + error.message);
+      throw error;
+    }
   }
 
   /**

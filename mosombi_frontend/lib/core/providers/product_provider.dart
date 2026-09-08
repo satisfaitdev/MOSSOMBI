@@ -36,7 +36,7 @@ class ProductProvider extends ChangeNotifier {
 
   Future<void> fetchProducts() async {
     try {
-      final response = await _apiClient.dio.get('/store/products');
+      final response = await _apiClient.dio.get('/store-enhanced/products');
         final List data = response.data['data'] ?? [];
         final List<Product> fetchedProducts = [];
         
@@ -54,77 +54,6 @@ class ProductProvider extends ChangeNotifier {
     } catch (e) {
       debugPrint('Error fetching products: $e');
     }
-  }
-
-  List<Product> _getMockProducts() {
-    return [
-      Product(
-        id: 'p1',
-        name: 'Iphone 15 Pro Max',
-        description: 'Dernier modèle, 256Go. Titane naturel. Technologie ultra-rapide.',
-        price: 850000.0,
-        stock: 5,
-        imageUrl: 'https://images.unsplash.com/photo-1695048133142-1a20484d2569?auto=format&fit=crop&q=80&w=800',
-        category: 'Électronique',
-        origin: 'Dubaï 🇦🇪',
-        deliveryTime: 'Livraison: 5-7 Jours',
-      ),
-      Product(
-        id: 'p2',
-        name: 'Robe d\'été Fleurie',
-        description: 'Robe légère, coupe élégante, idéale pour les sorties estivales.',
-        price: 15000.0,
-        stock: 12,
-        imageUrl: 'https://images.unsplash.com/photo-1572804013309-59a88b7e92f1?auto=format&fit=crop&q=80&w=800',
-        category: 'Mode',
-        origin: 'Chine 🇨🇳',
-        deliveryTime: 'Livraison: 10-15 Jours',
-      ),
-      Product(
-        id: 'p3',
-        name: 'Baskets Air Max Limitées',
-        description: 'Chaussures de sport ultra confort. Édition limitée.',
-        price: 65000.0,
-        stock: 2,
-        imageUrl: 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?auto=format&fit=crop&q=80&w=800',
-        category: 'Mode',
-        origin: 'Turquie 🇹🇷',
-        deliveryTime: 'Livraison: 7-10 Jours',
-      ),
-      Product(
-        id: 'p4',
-        name: 'Montre Connectée Galaxy',
-        description: 'Suivi santé et sport 24/7. Water resistant 50m.',
-        price: 180000.0,
-        stock: 0,
-        imageUrl: 'https://images.unsplash.com/photo-1579586337278-3befd40fd17a?auto=format&fit=crop&q=80&w=800',
-        category: 'Électronique',
-        origin: 'Local 📍',
-        deliveryTime: 'Livraison: 24 Heures',
-      ),
-      Product(
-        id: 'p5',
-        name: 'Parfum Sauvage Dior 100ml',
-        description: 'Eau de parfum authentique, sillage persistant.',
-        price: 82000.0,
-        stock: 8,
-        imageUrl: 'https://images.unsplash.com/photo-1594035910387-fea47794261f?auto=format&fit=crop&q=80&w=800',
-        category: 'Beauté',
-        origin: 'France 🇫🇷',
-        deliveryTime: 'Livraison: 7 Jours',
-      ),
-      Product(
-        id: 'p6',
-        name: 'Sac à Main Cuir Luxe',
-        description: 'Design épuré et grande capacité, finition premium.',
-        price: 45000.0,
-        stock: 14,
-        imageUrl: 'https://images.unsplash.com/photo-1584916201218-f4242ceb4809?auto=format&fit=crop&q=80&w=800',
-        category: 'Mode',
-        origin: 'Chine 🇨🇳',
-        deliveryTime: 'Livraison: 15-20 Jours',
-      ),
-    ];
   }
 
   List<Product> get products => _products;
@@ -373,11 +302,7 @@ class ProductProvider extends ChangeNotifier {
     error = null;
     notifyListeners();
     try {
-      // Mocked promotion API call
-      // final response = await _apiClient.dio.post('/agencies/my/products/$productId/promote', data: { 'days': days, 'coverage': coverage });
-      await Future.delayed(const Duration(seconds: 1));
-      
-      // We could update the product to add a "promoted: true" badge if product model supported it
+      final response = await _apiClient.dio.post('/agencies/my/products/$productId/promote', data: { 'days': days, 'coverage': coverage });
       notifyListeners();
       return true;
     } catch (e) {

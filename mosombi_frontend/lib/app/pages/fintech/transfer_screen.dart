@@ -81,7 +81,7 @@ class _TransferScreenState extends State<TransferScreen> {
     final amountText = _amountCtrl.text.replaceAll(' ', '');
     final amount = double.tryParse(amountText);
     if (amount == null || amount < 100) {
-      _showSnack('Le montant minimum est de 100 CDF / FCFA', isError: true);
+      _showSnack('Le montant minimum est de 100 FCFA', isError: true);
       return;
     }
 

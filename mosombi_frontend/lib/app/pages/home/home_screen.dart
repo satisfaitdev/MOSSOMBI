@@ -26,7 +26,8 @@ import 'package:mosombi_frontend/core/providers/auth_provider.dart';
 import 'dart:convert';
 
 class HomeScreen extends ConsumerStatefulWidget {
-  const HomeScreen({super.key});
+  final int initialTab;
+  const HomeScreen({super.key, this.initialTab = 0});
 
   @override
   ConsumerState<HomeScreen> createState() => _HomeScreenState();
@@ -51,16 +52,17 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with TickerProviderStat
     _ServiceItem(icon: Icons.store_mall_directory_rounded, label: 'Marketplace', gradient: [Color(0xFF6C4EF6), Color(0xFF9B77FF)]),
     _ServiceItem(icon: Icons.directions_car_rounded, label: 'Transport', gradient: [Color(0xFFFF6584), Color(0xFFFF8FA3)]),
     _ServiceItem(icon: Icons.restaurant_rounded, label: 'Food', gradient: [Color(0xFFFF9800), Color(0xFFFFB74D)]),
-    _ServiceItem(icon: Icons.account_balance_wallet_rounded, label: 'Fintech', gradient: [Color(0xFF00D4FF), Color(0xFF00E5C5)]),
+    _ServiceItem(icon: Icons.confirmation_number_rounded, label: 'Billetterie', gradient: [Color(0xFF00D4FF), Color(0xFF00E5C5)]),
     _ServiceItem(icon: Icons.location_city_rounded, label: 'Smart City', gradient: [Color(0xFF4CAF50), Color(0xFF81C784)]),
-    _ServiceItem(icon: Icons.sports_esports_rounded, label: 'Gaming', gradient: [Color(0xFFE91E63), Color(0xFFF48FB1)]),
+    _ServiceItem(icon: Icons.dashboard_customize_rounded, label: 'Services Digitaux', gradient: [Color(0xFFE91E63), Color(0xFFF48FB1)]),
     _ServiceItem(icon: Icons.monetization_on_rounded, label: 'Coins', gradient: [Color(0xFFFFA000), Color(0xFFFFD54F)]),
-    _ServiceItem(icon: Icons.favorite_rounded, label: 'Santé', gradient: [Color(0xFFF44336), Color(0xFFEF9A9A)]),
+    _ServiceItem(icon: Icons.flight_takeoff_rounded, label: 'Voyage', gradient: [Color(0xFFF44336), Color(0xFFEF9A9A)]),
   ];
 
   @override
   void initState() {
     super.initState();
+    _navIndex = widget.initialTab;
     _animCtrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 1500));
     _animFloat = CurvedAnimation(parent: _animCtrl, curve: Curves.easeInOut);
     _animScale = Tween<double>(begin: 1.0, end: 0.1).animate(
@@ -71,6 +73,16 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with TickerProviderStat
       // Refresh wallet balance from API
       context.read<WalletProvider>().fetchWalletData();
     });
+  }
+
+  @override
+  void didUpdateWidget(covariant HomeScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.initialTab != oldWidget.initialTab) {
+      setState(() {
+        _navIndex = widget.initialTab;
+      });
+    }
   }
 
   @override
@@ -557,10 +569,16 @@ class _ServiceCard extends StatelessWidget {
           context.push('/transport');
         } else if (service.label == 'Food') {
           context.push('/food');
-        } else if (service.label == 'Fintech') {
-          context.push('/fintech');
+        } else if (service.label == 'Billetterie') {
+          context.push('/ticketing');
+        } else if (service.label == 'Smart City') {
+          context.push('/smart-city');
+        } else if (service.label == 'Services Digitaux') {
+          context.push('/digital-services');
         } else if (service.label == 'Coins') {
-          // TODO: Implémenter la vue Coins/Récompenses
+          context.push('/coins');
+        } else if (service.label == 'Voyage') {
+          context.push('/travel');
         }
       },
       child: Column(

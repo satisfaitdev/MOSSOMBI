@@ -51,7 +51,7 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
         child: CustomScrollView(
           physics: const BouncingScrollPhysics(),
           slivers: [
-            MossombiSliverAppBar(
+            MossombiHeaderType2(
               title: 'Boutique Mossombi',
               actionIcon: const Icon(Icons.shopping_bag_rounded, color: Color(0xFF6C4EF6), size: 24),
               onActionTap: () => context.push('/cart'),

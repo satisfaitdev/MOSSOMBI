@@ -15,26 +15,42 @@ class BillsScreen extends StatefulWidget {
 }
 
 class _BillsScreenState extends State<BillsScreen> {
-  final _bills = [
-    {'id': 'elec', 'title': 'Électricité ENEO', 'amount': 18500.0, 'due': '31 Mars', 'icon': Icons.bolt_rounded, 'color': const Color(0xFFFFCC00), 'ref': 'ENEO-2024-03'},
-    {'id': 'water', 'title': 'Eau SNDE', 'amount': 9200.0, 'due': '28 Mars', 'icon': Icons.water_drop_rounded, 'color': const Color(0xFF00D4FF), 'ref': 'SNDE-2024-03'},
-    {'id': 'canal', 'title': 'Canal+ Abonnement', 'amount': 13000.0, 'due': '5 Avril', 'icon': Icons.live_tv_rounded, 'color': const Color(0xFF6C4EF6), 'ref': 'CANAL-MARCH'},
-    {'id': 'net', 'title': 'Internet Camtel', 'amount': 22000.0, 'due': '10 Avril', 'icon': Icons.wifi_rounded, 'color': const Color(0xFF00E5C5), 'ref': 'CAMTEL-2024'},
-  ];
-
-  final Set<String> _paidBills = {};
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      context.read<WalletProvider>().fetchBillsProviders();
+    });
+  }
 
   Future<void> _openConfirmSheet(Map<String, dynamic> bill) async {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final textColor = isDark ? Colors.white : AppColors.bgDark1;
-    final result = await showModalBottomSheet<bool>(
+    await showModalBottomSheet<bool>(
       context: context,
       backgroundColor: Colors.transparent,
       isScrollControlled: true,
       builder: (ctx) => _BillConfirmSheet(bill: bill, textColor: textColor, isDark: isDark),
     );
-    if (result == true) {
-      if (mounted) setState(() => _paidBills.add(bill['id'] as String));
+  }
+
+  IconData _categoryIcon(String category) {
+    switch (category) {
+      case 'electricity': return Icons.bolt_rounded;
+      case 'water': return Icons.water_drop_rounded;
+      case 'tv': return Icons.live_tv_rounded;
+      case 'internet': return Icons.wifi_rounded;
+      default: return Icons.receipt_long_rounded;
+    }
+  }
+
+  Color _categoryColor(String category) {
+    switch (category) {
+      case 'electricity': return const Color(0xFFFFCC00);
+      case 'water': return const Color(0xFF00D4FF);
+      case 'tv': return const Color(0xFF6C4EF6);
+      case 'internet': return const Color(0xFF00E5C5);
+      default: return const Color(0xFF4CAF50);
     }
   }
 
@@ -43,6 +59,8 @@ class _BillsScreenState extends State<BillsScreen> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final textColor = isDark ? Colors.white : AppColors.bgDark1;
     final hintColor = isDark ? Colors.white54 : AppColors.textSecondaryLight;
+    final wallet = context.watch<WalletProvider>();
+    final providers = wallet.billProviders;
 
     return Scaffold(
       extendBodyBehindAppBar: true,
@@ -55,41 +73,40 @@ class _BillsScreenState extends State<BillsScreen> {
       body: AnimatedGradientBg(
         isDark: isDark,
         child: SafeArea(
-          child: ListView.builder(
-            padding: const EdgeInsets.all(24),
-            physics: const BouncingScrollPhysics(),
-            itemCount: _bills.length,
-            itemBuilder: (ctx, i) {
-              final bill = _bills[i];
-              final isPaid = _paidBills.contains(bill['id']);
-              return Container(
-                margin: const EdgeInsets.only(bottom: 16),
-                child: GlassContainer(
-                  padding: const EdgeInsets.all(20),
-                  child: Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(14),
-                        decoration: BoxDecoration(
-                          color: (bill['color'] as Color).withValues(alpha: 0.15),
-                          shape: BoxShape.circle,
-                        ),
-                        child: Icon(bill['icon'] as IconData, color: bill['color'] as Color, size: 24),
-                      ),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                          Text(bill['title'] as String, style: TextStyle(color: textColor, fontWeight: FontWeight.bold, fontSize: 15)),
-                          const SizedBox(height: 4),
-                          Text('Réf: ${bill['ref']} • Échéance: ${bill['due']}', style: TextStyle(color: hintColor, fontSize: 11)),
-                          const SizedBox(height: 4),
-                          Text('${(bill['amount'] as double).toStringAsFixed(0)} FCFA', style: const TextStyle(color: Color(0xFF00E5C5), fontWeight: FontWeight.w900, fontSize: 16)),
-                        ]),
-                      ),
-                      const SizedBox(width: 12),
-                      isPaid
-                          ? const Icon(Icons.check_circle_rounded, color: Colors.green, size: 36)
-                          : SizedBox(
+          child: providers.isEmpty
+              ? const Center(child: CircularProgressIndicator())
+              : ListView.builder(
+                  padding: const EdgeInsets.all(24),
+                  physics: const BouncingScrollPhysics(),
+                  itemCount: providers.length,
+                  itemBuilder: (ctx, i) {
+                    final bill = providers[i];
+                    final category = bill['category'] as String? ?? '';
+                    final color = _categoryColor(category);
+                    return Container(
+                      margin: const EdgeInsets.only(bottom: 16),
+                      child: GlassContainer(
+                        padding: const EdgeInsets.all(20),
+                        child: Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(14),
+                              decoration: BoxDecoration(
+                                color: color.withValues(alpha: 0.15),
+                                shape: BoxShape.circle,
+                              ),
+                              child: Icon(_categoryIcon(category), color: color, size: 24),
+                            ),
+                            const SizedBox(width: 16),
+                            Expanded(
+                              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                                Text(bill['name'] as String? ?? '', style: TextStyle(color: textColor, fontWeight: FontWeight.bold, fontSize: 15)),
+                                const SizedBox(height: 4),
+                                Text(bill['category'] as String? ?? '', style: TextStyle(color: hintColor, fontSize: 11)),
+                              ]),
+                            ),
+                            const SizedBox(width: 12),
+                            SizedBox(
                               width: 80,
                               height: 38,
                               child: ElevatedButton(
@@ -102,12 +119,12 @@ class _BillsScreenState extends State<BillsScreen> {
                                 child: const Text('Payer', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12)),
                               ),
                             ),
-                    ],
-                  ),
+                          ],
+                        ),
+                      ),
+                    ).animate(delay: (i * 80).ms).fade().slideX(begin: 0.1, end: 0);
+                  },
                 ),
-              ).animate(delay: (i * 80).ms).fade().slideX(begin: 0.1, end: 0);
-            },
-          ),
         ),
       ),
     );
@@ -130,13 +147,12 @@ class _BillConfirmSheetState extends State<_BillConfirmSheet> {
 
   bool _saveInfo = true;
   bool _isSavedMode = false;
-  String? _selectedProvider;
 
   @override
   void initState() {
     super.initState();
-    _refCtrl = TextEditingController(text: widget.bill['ref'] as String);
-    _amountCtrl = TextEditingController(text: (widget.bill['amount'] as double).toStringAsFixed(0));
+    _refCtrl = TextEditingController();
+    _amountCtrl = TextEditingController();
     _loadSavedInfo();
   }
 
@@ -144,13 +160,12 @@ class _BillConfirmSheetState extends State<_BillConfirmSheet> {
     final prefs = await SharedPreferences.getInstance();
     final prefKey = 'pref_bill_${widget.bill['id']}';
     final savedRef = prefs.getString('${prefKey}_ref');
-    
+    final savedAmount = prefs.getString('${prefKey}_amount');
+
     if (savedRef != null && savedRef.isNotEmpty && mounted) {
-      if (widget.bill['id'] == 'canal' || widget.bill['id'] == 'net') {
-        _selectedProvider = prefs.getString('${prefKey}_provider');
-      }
       setState(() {
         _refCtrl.text = savedRef;
+        if (savedAmount != null) _amountCtrl.text = savedAmount;
         _isSavedMode = true;
       });
     }
@@ -164,19 +179,11 @@ class _BillConfirmSheetState extends State<_BillConfirmSheet> {
   }
 
   Future<void> _confirm() async {
-    final id = widget.bill['id'] as String;
-    
-    if (!_isSavedMode) {
-      if ((id == 'canal' || id == 'net') && _selectedProvider == null) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Veuillez choisir un fournisseur', style: TextStyle(color: Colors.white)), backgroundColor: Colors.orange));
-        return;
-      }
-      if (_refCtrl.text.isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Veuillez entrer une référence valide', style: TextStyle(color: Colors.white)), backgroundColor: Colors.orange));
-        return;
-      }
+    if (_refCtrl.text.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Veuillez entrer une référence valide', style: TextStyle(color: Colors.white)), backgroundColor: Colors.orange));
+      return;
     }
-    
+
     final amountParsed = double.tryParse(_amountCtrl.text.replaceAll(' ', ''));
     if (amountParsed == null || amountParsed <= 0) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Veuillez entrer un montant valide', style: TextStyle(color: Colors.white)), backgroundColor: Colors.orange));
@@ -187,27 +194,20 @@ class _BillConfirmSheetState extends State<_BillConfirmSheet> {
 
     if (_saveInfo && !_isSavedMode) {
       final prefs = await SharedPreferences.getInstance();
-      final prefKey = 'pref_bill_$id';
+      final prefKey = 'pref_bill_${widget.bill['id']}';
       await prefs.setString('${prefKey}_ref', _refCtrl.text);
-      if (id == 'canal' || id == 'net') {
-        await prefs.setString('${prefKey}_provider', _selectedProvider ?? "Inconnu");
-      }
-    }
-
-    String finalTitle = '${widget.bill['title']} (Réf: ${_refCtrl.text})';
-    if (id == 'canal' || id == 'net') {
-       finalTitle = '${_selectedProvider ?? widget.bill['title']} - Réf: ${_refCtrl.text}';
+      await prefs.setString('${prefKey}_amount', _amountCtrl.text);
     }
 
     final wallet = Provider.of<WalletProvider>(context, listen: false);
-    final ok = await wallet.payBill(amountParsed, finalTitle);
-    
+    final ok = await wallet.payBill(amountParsed, widget.bill['id'] as String, _refCtrl.text);
+
     if (!mounted) return;
     setState(() => _loading = false);
-    
+
     Navigator.pop(context, ok);
     if (ok) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${widget.bill['title']} payée ✅', style: const TextStyle(color: Colors.white)), backgroundColor: Colors.green));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${widget.bill['name']} payée ✅', style: const TextStyle(color: Colors.white)), backgroundColor: Colors.green));
     } else {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Solde insuffisant', style: TextStyle(color: Colors.white)), backgroundColor: Colors.redAccent));
     }
@@ -223,27 +223,10 @@ class _BillConfirmSheetState extends State<_BillConfirmSheet> {
   }
 
   Widget _buildEditForm() {
-    final id = widget.bill['id'] as String;
-    
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
-        if (id == 'canal' || id == 'net') ...[
-          Text('Fournisseur', style: TextStyle(color: widget.textColor, fontWeight: FontWeight.bold, fontSize: 13)),
-          const SizedBox(height: 8),
-          _buildFieldWrapper(DropdownButtonHideUnderline(
-            child: DropdownButton<String>(
-              isExpanded: true,
-              dropdownColor: widget.isDark ? AppColors.bgDark2 : Colors.white,
-              value: _selectedProvider,
-              hint: const Text('Choisir le fournisseur'),
-              items: (id == 'canal' ? ['Canal+', 'Startimes'] : ['Canalbox', 'Congo Telecom']).map((e) => DropdownMenuItem(value: e, child: Text(e, style: TextStyle(color: widget.textColor)))).toList(),
-              onChanged: (v) => setState(() => _selectedProvider = v),
-            ),
-          )),
-        ],
-
         Text('Référence abonné / Facture', style: TextStyle(color: widget.textColor, fontWeight: FontWeight.bold, fontSize: 13)),
         const SizedBox(height: 8),
         _buildFieldWrapper(TextField(
@@ -257,44 +240,40 @@ class _BillConfirmSheetState extends State<_BillConfirmSheet> {
         _buildFieldWrapper(TextField(
           controller: _amountCtrl,
           keyboardType: TextInputType.number,
-          style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900, color: widget.bill['color']),
+          style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900, color: widget.textColor),
           decoration: const InputDecoration(border: InputBorder.none, hintText: '0'),
         )),
 
         CheckboxListTile(
           value: _saveInfo,
           onChanged: (v) => setState(() => _saveInfo = v ?? true),
-          title: const Text('Enregistrer la référence et le fournisseur', style: TextStyle(fontSize: 12)),
+          title: const Text('Enregistrer la référence', style: TextStyle(fontSize: 12)),
           controlAffinity: ListTileControlAffinity.leading,
           contentPadding: EdgeInsets.zero,
-          activeColor: widget.bill['color'],
+          activeColor: widget.textColor,
         ),
       ],
     );
   }
 
   Widget _buildSavedModeCard() {
-    final id = widget.bill['id'] as String;
     String details = "Réf: ${_refCtrl.text}";
-    if (id == 'canal' || id == 'net') {
-      details = "Fournisseur: ${_selectedProvider ?? '-'}\nRéf: ${_refCtrl.text}";
-    }
 
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(20),
       margin: const EdgeInsets.only(bottom: 24),
       decoration: BoxDecoration(
-        color: (widget.bill['color'] as Color).withValues(alpha: 0.1),
+        color: Colors.grey.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: (widget.bill['color'] as Color).withValues(alpha: 0.3)),
+        border: Border.all(color: Colors.grey.withValues(alpha: 0.3)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Icon(Icons.check_circle_rounded, color: widget.bill['color']),
+              Icon(Icons.check_circle_rounded, color: widget.textColor),
               const SizedBox(width: 8),
               Expanded(child: Text('Détails de facturation sauvegardés', style: TextStyle(color: widget.textColor, fontWeight: FontWeight.bold, fontSize: 14))),
             ],
@@ -302,7 +281,7 @@ class _BillConfirmSheetState extends State<_BillConfirmSheet> {
           const SizedBox(height: 12),
           Text(details, style: TextStyle(color: widget.textColor.withValues(alpha: 0.8), fontSize: 13, height: 1.5)),
           const SizedBox(height: 12),
-          Text('${_amountCtrl.text} FCFA', style: TextStyle(color: widget.bill['color'], fontSize: 28, fontWeight: FontWeight.w900)),
+          Text('${_amountCtrl.text} FCFA', style: TextStyle(color: widget.textColor, fontSize: 28, fontWeight: FontWeight.w900)),
         ],
       ),
     );
@@ -310,7 +289,6 @@ class _BillConfirmSheetState extends State<_BillConfirmSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final color = widget.bill['color'] as Color;
     return Container(
       padding: EdgeInsets.only(top: 28, left: 24, right: 24, bottom: MediaQuery.of(context).viewInsets.bottom + 24),
       decoration: BoxDecoration(
@@ -326,22 +304,22 @@ class _BillConfirmSheetState extends State<_BillConfirmSheet> {
             const SizedBox(height: 24),
             Row(
               children: [
-                Container(padding: const EdgeInsets.all(16), decoration: BoxDecoration(color: color.withValues(alpha: 0.15), shape: BoxShape.circle),
-                  child: Icon(widget.bill['icon'] as IconData, color: color, size: 32)),
+                Container(padding: const EdgeInsets.all(16), decoration: BoxDecoration(color: Colors.grey.withValues(alpha: 0.15), shape: BoxShape.circle),
+                  child: Icon(Icons.receipt_long_rounded, color: widget.textColor, size: 32)),
                 const SizedBox(width: 16),
                 Expanded(child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(widget.bill['title'] as String, style: TextStyle(color: widget.textColor, fontSize: 18, fontWeight: FontWeight.w900)),
-                    Text('Échéance : ${widget.bill['due']}', style: const TextStyle(color: Colors.grey, fontSize: 12)),
+                    Text(widget.bill['name'] as String? ?? '', style: TextStyle(color: widget.textColor, fontSize: 18, fontWeight: FontWeight.w900)),
+                    Text(widget.bill['category'] as String? ?? '', style: const TextStyle(color: Colors.grey, fontSize: 12)),
                   ],
                 )),
               ],
             ),
             const SizedBox(height: 28),
-            
+
             if (_isSavedMode) _buildSavedModeCard() else _buildEditForm(),
-            
+
             const SizedBox(height: 16),
             Row(children: [
               if (_isSavedMode)
@@ -360,7 +338,7 @@ class _BillConfirmSheetState extends State<_BillConfirmSheet> {
               const SizedBox(width: 12),
               Expanded(flex: 2, child: ElevatedButton(
                 onPressed: _loading ? null : _confirm,
-                style: ElevatedButton.styleFrom(backgroundColor: color, padding: const EdgeInsets.symmetric(vertical: 16), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16))),
+                style: ElevatedButton.styleFrom(backgroundColor: Colors.orange, padding: const EdgeInsets.symmetric(vertical: 16), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16))),
                 child: _loading
                     ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
                     : const Text('Confirmer', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
@@ -372,4 +350,3 @@ class _BillConfirmSheetState extends State<_BillConfirmSheet> {
     );
   }
 }
-

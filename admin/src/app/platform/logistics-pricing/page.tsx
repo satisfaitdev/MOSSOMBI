@@ -244,14 +244,22 @@ export default function LogisticsPricingPage() {
     if (!name) return;
 
     setMatrix(prev => {
-      const newMatrix = { ...prev };
-      const local = { ...newMatrix[selectedCountry].Local };
-      local.cities = { 
-        ...(local.cities || {}), 
-        [name]: { zones: { "Zone Standard": { neighborhoods: [], multiplier: 1.0, fee: 0 } } } 
+      const countryConfig = prev[selectedCountry];
+      if (!countryConfig) return prev;
+      const local = countryConfig.Local;
+      return {
+        ...prev,
+        [selectedCountry]: {
+          ...countryConfig,
+          Local: {
+            ...local,
+            cities: {
+              ...(local.cities || {}),
+              [name]: { zones: { "Zone Standard": { neighborhoods: [], multiplier: 1.0, fee: 0 } } }
+            }
+          }
+        }
       };
-      newMatrix[selectedCountry] = { ...newMatrix[selectedCountry], Local: local };
-      return newMatrix;
     });
     setSelectedCity(name);
   };
@@ -259,13 +267,21 @@ export default function LogisticsPricingPage() {
   const removeCity = (cityName: string) => {
     if (!selectedCountry || !confirm(`Supprimer la ville ${cityName} et toutes ses zones ?`)) return;
     setMatrix(prev => {
-      const newMatrix = { ...prev };
-      const local = { ...newMatrix[selectedCountry].Local };
+      const countryConfig = prev[selectedCountry];
+      if (!countryConfig) return prev;
+      const local = countryConfig.Local;
       const newCities = { ...(local.cities || {}) };
       delete newCities[cityName];
-      local.cities = newCities;
-      newMatrix[selectedCountry] = { ...newMatrix[selectedCountry], Local: local };
-      return newMatrix;
+      return {
+        ...prev,
+        [selectedCountry]: {
+          ...countryConfig,
+          Local: {
+            ...local,
+            cities: newCities
+          }
+        }
+      };
     });
     if (selectedCity === cityName) setSelectedCity("");
   };
@@ -276,16 +292,32 @@ export default function LogisticsPricingPage() {
     if (!name) return;
 
     setMatrix(prev => {
-      const newMatrix = { ...prev };
-      const local = { ...newMatrix[selectedCountry].Local };
-      if (local.cities && local.cities[cityName]) {
-        local.cities[cityName].zones = {
-          ...local.cities[cityName].zones,
-          [name]: { neighborhoods: [], multiplier: 1.0, fee: 0 }
-        };
-      }
-      newMatrix[selectedCountry] = { ...newMatrix[selectedCountry], Local: local };
-      return newMatrix;
+      const countryConfig = prev[selectedCountry];
+      if (!countryConfig) return prev;
+      const local = countryConfig.Local;
+      const cities = local.cities || {};
+      const city = cities[cityName];
+      if (!city) return prev;
+
+      return {
+        ...prev,
+        [selectedCountry]: {
+          ...countryConfig,
+          Local: {
+            ...local,
+            cities: {
+              ...cities,
+              [cityName]: {
+                ...city,
+                zones: {
+                  ...(city.zones || {}),
+                  [name]: { neighborhoods: [], multiplier: 1.0, fee: 0 }
+                }
+              }
+            }
+          }
+        }
+      };
     });
     setSelectedZone(name);
   };
@@ -293,31 +325,71 @@ export default function LogisticsPricingPage() {
   const removeZone = (cityName: string, zoneName: string) => {
     if (!selectedCountry || !confirm(`Supprimer la zone ${zoneName} ?`)) return;
     setMatrix(prev => {
-      const newMatrix = { ...prev };
-      const local = { ...newMatrix[selectedCountry].Local };
-      if (local.cities && local.cities[cityName]) {
-        const newZones = { ...local.cities[cityName].zones };
-        delete newZones[zoneName];
-        local.cities[cityName].zones = newZones;
-      }
-      newMatrix[selectedCountry] = { ...newMatrix[selectedCountry], Local: local };
-      return newMatrix;
+      const countryConfig = prev[selectedCountry];
+      if (!countryConfig) return prev;
+      const local = countryConfig.Local;
+      const cities = local.cities || {};
+      const city = cities[cityName];
+      if (!city) return prev;
+
+      const newZones = { ...(city.zones || {}) };
+      delete newZones[zoneName];
+
+      return {
+        ...prev,
+        [selectedCountry]: {
+          ...countryConfig,
+          Local: {
+            ...local,
+            cities: {
+              ...cities,
+              [cityName]: {
+                ...city,
+                zones: newZones
+              }
+            }
+          }
+        }
+      };
     });
     if (selectedZone === zoneName) setSelectedZone("");
   };
 
   const updateZone = (cityName: string, zoneName: string, field: keyof ZoneConfig, value: any) => {
     setMatrix(prev => {
-      const newMatrix = { ...prev };
-      const local = { ...newMatrix[selectedCountry].Local };
-      if (local.cities && local.cities[cityName] && local.cities[cityName].zones[zoneName]) {
-        local.cities[cityName].zones[zoneName] = {
-          ...local.cities[cityName].zones[zoneName],
-          [field]: value
-        };
-      }
-      newMatrix[selectedCountry] = { ...newMatrix[selectedCountry], Local: local };
-      return newMatrix;
+      if (!selectedCountry) return prev;
+      const countryConfig = prev[selectedCountry];
+      if (!countryConfig) return prev;
+      const local = countryConfig.Local;
+      const cities = local.cities || {};
+      const city = cities[cityName];
+      if (!city) return prev;
+      const zones = city.zones || {};
+      const zone = zones[zoneName];
+      if (!zone) return prev;
+
+      return {
+        ...prev,
+        [selectedCountry]: {
+          ...countryConfig,
+          Local: {
+            ...local,
+            cities: {
+              ...cities,
+              [cityName]: {
+                ...city,
+                zones: {
+                  ...zones,
+                  [zoneName]: {
+                    ...zone,
+                    [field]: value
+                  }
+                }
+              }
+            }
+          }
+        }
+      };
     });
   };
 
@@ -753,6 +825,13 @@ export default function LogisticsPricingPage() {
                   const uniqueNames = combined.filter((name, index) => combined.indexOf(name) === index);
                   updateZone(selectedCity, selectedZone, 'neighborhoods', uniqueNames);
                 }}
+                otherZones={Object.entries(currentCountryData!.Local.cities![selectedCity].zones)
+                  .filter(([zoneName]) => zoneName !== selectedZone)
+                  .map(([zoneName, zoneConfig]) => ({
+                    name: zoneName,
+                    boundary: zoneConfig.boundary
+                  }))
+                  .filter((z): z is { name: string; boundary: number[][] } => !!z.boundary && z.boundary.length > 0)}
               />
             )}
             <div className="p-4 bg-blue-500/5 border border-blue-500/20 rounded-2xl flex items-start gap-4">

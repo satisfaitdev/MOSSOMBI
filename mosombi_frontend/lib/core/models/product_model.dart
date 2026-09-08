@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'dart:convert';
 
 class Product {
   final String id;
@@ -84,6 +85,56 @@ class Product {
     return 0;
   }
 
+  static String _parseCategory(dynamic categoryData) {
+    if (categoryData == null) return 'Marketplace';
+    if (categoryData is Map) {
+      final name = categoryData['name'] ?? categoryData['NAME'];
+      final id = categoryData['id'] ?? categoryData['ID'];
+      return name?.toString() ?? id?.toString() ?? 'Marketplace';
+    }
+    final str = categoryData.toString().trim();
+    if (str.startsWith('{') && str.endsWith('}')) {
+      try {
+        final decoded = jsonDecode(str);
+        if (decoded is Map) {
+          final name = decoded['name'] ?? decoded['NAME'];
+          final id = decoded['id'] ?? decoded['ID'];
+          return name?.toString() ?? id?.toString() ?? str;
+        }
+      } catch (_) {
+        final match = RegExp(r'name:\s*([^,}]+)', caseSensitive: false).firstMatch(str);
+        if (match != null) {
+          return match.group(1)!.trim();
+        }
+      }
+    }
+    return str;
+  }
+
+  static String? _parseBrand(dynamic categoryData) {
+    if (categoryData == null) return null;
+    if (categoryData is Map) {
+      final brand = categoryData['brand'] ?? categoryData['BRAND'];
+      return brand?.toString();
+    }
+    final str = categoryData.toString().trim();
+    if (str.startsWith('{') && str.endsWith('}')) {
+      try {
+        final decoded = jsonDecode(str);
+        if (decoded is Map) {
+          final brand = decoded['brand'] ?? decoded['BRAND'];
+          return brand?.toString();
+        }
+      } catch (_) {
+        final match = RegExp(r'brand:\s*([^,}]+)', caseSensitive: false).firstMatch(str);
+        if (match != null) {
+          return match.group(1)!.trim();
+        }
+      }
+    }
+    return null;
+  }
+
   factory Product.fromJson(Map<String, dynamic> json) {
     try {
       final metadata = json['metadata'] is Map ? json['metadata'] as Map<String, dynamic> : {};
@@ -129,7 +180,7 @@ class Product {
         name: json['name']?.toString() ?? '',
         description: json['description']?.toString() ?? '',
         price: _parseDouble(json['price']),
-        stock: _parseInt(json['stock'] ?? metadata['stock_management']?['quantity']),
+        stock: _parseInt(json['stock'] ?? (json['in_stock'] == true ? 1 : 0)),
         imageUrl: () {
           final directUrl = json['imageUrl']?.toString() ?? json['image_url']?.toString() ?? '';
           if (directUrl.isNotEmpty) return directUrl;
@@ -138,10 +189,10 @@ class Product {
         }(),
         galleryUrls: gallery,
         videoUrl: metadata['media']?['video']?.toString(),
-        category: json['category']?.toString() ?? 
-            (metadata['category'] is Map ? metadata['category']['name']?.toString() : 
-             metadata['category'] is String ? metadata['category'] : 'Marketplace') ?? 'Marketplace',
-        brand: metadata['category'] is Map ? metadata['category']['brand']?.toString() : null,
+        category: _parseCategory(json['category'] ?? metadata['category']),
+        brand: json['brand']?.toString() ??
+            _parseBrand(json['category']) ??
+            _parseBrand(metadata['category']),
         origin: json['origin']?.toString() ?? (json['country']?.toString() ?? 'Local'),
         deliveryTime: json['deliveryTime']?.toString() ?? (json['delivery_time']?.toString() ?? 'Standard'),
         agencyId: json['agencyId']?.toString() ?? json['agency_id']?.toString(),

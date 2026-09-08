@@ -3,12 +3,18 @@
 import { useEffect, useRef, useState } from "react";
 import { X, Save, Trash2, MapPin, Search } from "lucide-react";
 
+interface OtherZone {
+  name: string;
+  boundary?: number[][];
+}
+
 interface MapDrawerProps {
   initialBoundary?: number[][];
   cityName: string;
   onSave: (boundary: number[][]) => void;
   onDetectNames?: (names: string[]) => void;
   onClose: () => void;
+  otherZones?: OtherZone[];
 }
 
 declare global {
@@ -17,7 +23,7 @@ declare global {
   }
 }
 
-export default function MapDrawer({ initialBoundary, cityName, onSave, onDetectNames, onClose }: MapDrawerProps) {
+export default function MapDrawer({ initialBoundary, cityName, onSave, onDetectNames, onClose, otherZones }: MapDrawerProps) {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<any>(null);
   const drawControlRef = useRef<any>(null);
@@ -85,13 +91,21 @@ export default function MapDrawer({ initialBoundary, cityName, onSave, onDetectN
       attribution: '© OpenStreetMap contributors'
     }).addTo(map);
 
+    let isMounted = true;
+
     // Try to geocode city name to center map (approximate)
     fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(cityName)}`)
-      .then(res => res.json())
+      .then(res => {
+        if (!res.ok) throw new Error("Nominatim status: " + res.status);
+        return res.json();
+      })
       .then(data => {
-        if (data && data[0]) {
+        if (isMounted && mapRef.current && data && data[0]) {
           map.setView([parseFloat(data[0].lat), parseFloat(data[0].lon)], 13);
         }
+      })
+      .catch(err => {
+        console.error("Error geocoding city name:", err);
       });
 
     // Feature group to store editable layers
@@ -105,6 +119,55 @@ export default function MapDrawer({ initialBoundary, cityName, onSave, onDetectN
       const polygon = L.polygon(latlngs, { color: '#10b981' });
       editableLayers.addLayer(polygon);
       map.fitBounds(polygon.getBounds());
+    }
+
+    console.log("MapDrawer received otherZones:", otherZones);
+    
+    // Render other zones in the same city as read-only layers
+    if (otherZones && otherZones.length > 0) {
+      otherZones.forEach(zone => {
+        try {
+          if (zone.boundary && zone.boundary.length > 0) {
+            const latlngs = zone.boundary
+              .map(p => {
+                if (p && p.length >= 2) {
+                  const lat = parseFloat(p[1] as any);
+                  const lng = parseFloat(p[0] as any);
+                  if (!isNaN(lat) && !isNaN(lng)) {
+                    return [lat, lng];
+                  }
+                }
+                return null;
+              })
+              .filter((p): p is number[] => p !== null);
+
+            if (latlngs.length > 0) {
+              const otherPolygon = L.polygon(latlngs, {
+                color: '#3b82f6', // Beautiful blue
+                fillColor: '#3b82f6',
+                fillOpacity: 0.12,
+                weight: 2.5,
+                dashArray: '6, 6', // dashed outline to signify it is not the active editable zone
+                interactive: true
+              }).addTo(map);
+
+              // Add a permanent tooltip or a popup with the zone's name
+              otherPolygon.bindTooltip(zone.name, {
+                permanent: true,
+                direction: 'center',
+                className: 'bg-zinc-950/80 border border-blue-500/30 text-blue-400 text-[10px] px-1.5 py-0.5 rounded font-bold'
+              });
+              
+              otherPolygon.bindPopup(`<strong>Zone : ${zone.name}</strong><br/>Zone existante (non modifiable ici)`);
+              console.log(`Successfully drew read-only zone: ${zone.name}`, latlngs);
+            } else {
+              console.warn(`No valid coordinates for zone: ${zone.name}`, zone.boundary);
+            }
+          }
+        } catch (err) {
+          console.error(`Failed to draw read-only zone: ${zone.name}`, err);
+        }
+      });
     }
 
     const drawOptions = {
@@ -138,10 +201,11 @@ export default function MapDrawer({ initialBoundary, cityName, onSave, onDetectN
     });
 
     return () => {
+      isMounted = false;
       map.remove();
       mapRef.current = null;
     };
-  }, [loaded, cityName, initialBoundary]);
+  }, [loaded]);
 
   const handleSave = () => {
     if (!editableLayersRef.current) return;
@@ -168,56 +232,122 @@ export default function MapDrawer({ initialBoundary, cityName, onSave, onDetectN
     if (layers.length === 0) return;
 
     setIsSearching(true);
-    try {
-      // Get the first polygon's coordinates for Overpass poly search
-      const latlngs = layers[0].getLatLngs()[0];
-      const polyCoords = (Array.isArray(latlngs) ? latlngs : [latlngs])
-        .map((ll: any) => `${ll.lat} ${ll.lng}`)
-        .join(" ");
+    let names: string[] = [];
+    
+    // Get the first polygon's coordinates for Overpass poly search
+    const latlngs = layers[0].getLatLngs()[0];
+    const coords = (Array.isArray(latlngs) ? latlngs : [latlngs]);
+    const polyCoords = coords
+      .map((ll: any) => `${ll.lat} ${ll.lng}`)
+      .join(" ");
 
-      const query = `[out:json];(node(poly:"${polyCoords}")["place"~"suburb|neighbourhood|quarter"];way(poly:"${polyCoords}")["place"~"suburb|neighbourhood|quarter"];rel(poly:"${polyCoords}")["place"~"suburb|neighbourhood|quarter"];);out tags;`;
-      
+    // Calculate center point for fallback
+    let sumLat = 0, sumLng = 0;
+    coords.forEach((ll: any) => {
+      sumLat += ll.lat;
+      sumLng += ll.lng;
+    });
+    const centerLat = sumLat / coords.length;
+    const centerLng = sumLng / coords.length;
+
+    // 1. Try Overpass API with AbortController timeout (10 seconds)
+    const query = `[out:json][timeout:10];(node(poly:"${polyCoords}")["place"~"suburb|neighbourhood|quarter|locality|village|town|city_block|hamlet"];way(poly:"${polyCoords}")["place"~"suburb|neighbourhood|quarter|locality|village|town|city_block|hamlet"];rel(poly:"${polyCoords}")["place"~"suburb|neighbourhood|quarter|locality|village|town|city_block|hamlet"];);out tags;`;
+    
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000);
+
+    try {
       const response = await fetch("https://overpass-api.de/api/interpreter", {
         method: "POST",
-        body: query
+        body: query,
+        signal: controller.signal
       });
-      const data = await response.json();
-      const names = data.elements
-        .map((e: any) => e.tags.name)
-        .filter((name: string, index: number, self: string[]) => name && self.indexOf(name) === index);
+      clearTimeout(timeoutId);
 
-      if (names.length > 0) {
-        if (confirm(`Quartiers détectés : ${names.join(", ")}. Voulez-vous les ajouter automatiquement à la liste ?`)) {
-          if (onDetectNames) {
-            onDetectNames(names);
-          } else {
-            // Fallback to clipboard if callback not provided
-            navigator.clipboard.writeText(names.join(", "));
-            alert("Copié dans le presse-papier !");
-          }
+      if (response.ok) {
+        const data = await response.json();
+        if (data && data.elements) {
+          names = data.elements
+            .map((e: any) => e.tags?.name)
+            .filter((name: string, index: number, self: string[]) => name && self.indexOf(name) === index);
         }
       } else {
-        alert("Aucun quartier nommé n'a été détecté dans cette zone.");
+        console.warn(`Overpass API returned non-OK status: ${response.status}`);
       }
     } catch (error) {
-      console.error("Detection error:", error);
-      alert("Erreur lors de la détection des quartiers.");
-    } finally {
-      setIsSearching(false);
+      clearTimeout(timeoutId);
+      console.warn("Overpass API error or timeout, will fallback to Nominatim reverse geocoding:", error);
     }
+
+    // 2. Fallback: Si Overpass ne trouve rien (ou s'il a planté/timeout),
+    // on fait un reverse geocoding Nominatim sur le centre du polygone tracé
+    if (names.length === 0) {
+      try {
+        const revRes = await fetch(
+          `https://nominatim.openstreetmap.org/reverse?format=json&lat=${centerLat}&lon=${centerLng}&addressdetails=1`,
+          { headers: { "User-Agent": "Mossombi-Admin-Panel" } }
+        );
+        if (revRes.ok) {
+          const revData = await revRes.json();
+          if (revData && revData.address) {
+            const addr = revData.address;
+            const detected = addr.suburb || addr.neighbourhood || addr.quarter || addr.subdivision || addr.locality || addr.city_block || addr.village;
+            if (detected) {
+              names = [detected];
+            }
+          }
+        }
+      } catch (revError) {
+        console.error("Nominatim fallback error:", revError);
+      }
+    }
+
+    if (names.length > 0) {
+      if (confirm(`Quartiers détectés : ${names.join(", ")}. Voulez-vous les ajouter automatiquement à la liste ?`)) {
+        if (onDetectNames) {
+          onDetectNames(names);
+        } else {
+          // Fallback to clipboard if callback not provided
+          navigator.clipboard.writeText(names.join(", "));
+          alert("Copié dans le presse-papier !");
+        }
+      }
+    } else {
+      alert("Aucun quartier nommé n'a été détecté dans cette zone. Vous pouvez le saisir manuellement.");
+    }
+    
+    setIsSearching(false);
   };
 
   const searchNeighborhood = async () => {
     if (!searchQuery.trim()) return;
     setIsSearching(true);
     try {
-      const response = await fetch(
+      // 1. Try searching with the city name suffix
+      let response = await fetch(
         `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(
           searchQuery + ", " + cityName
         )}&polygon_geojson=1`,
         { headers: { "User-Agent": "Mossombi-Admin-Panel" } }
       );
-      const data = await response.json();
+      let data = [];
+      if (response.ok) {
+        data = await response.json();
+      }
+
+      // 2. Fallback to global search if no results found
+      if ((!data || data.length === 0) && searchQuery.toLowerCase() !== cityName.toLowerCase()) {
+        response = await fetch(
+          `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(
+            searchQuery
+          )}&polygon_geojson=1`,
+          { headers: { "User-Agent": "Mossombi-Admin-Panel" } }
+        );
+        if (response.ok) {
+          data = await response.json();
+        }
+      }
+
       setSearchResults(data);
     } catch (error) {
       console.error("Search error:", error);
@@ -248,9 +378,34 @@ export default function MapDrawer({ initialBoundary, cityName, onSave, onDetectN
       setSearchResults([]);
       setSearchQuery("");
     } else {
-      // If it's just a point, center on it
-      mapRef.current.setView([parseFloat(result.lat), parseFloat(result.lon)], 16);
-      alert("Ce résultat n'a pas de contour géométrique précis. Vous pouvez le tracer manuellement à cet endroit.");
+      // Si c'est juste un point (fréquent en Afrique où les contours des quartiers ne sont pas tous dessinés),
+      // nous générons un carré par défaut de ~1km autour de ce point pour que l'utilisateur n'ait pas à le tracer manuellement.
+      const lat = parseFloat(result.lat);
+      const lon = parseFloat(result.lon);
+      const d = 0.005; // environ 500m de rayon (1km de côté)
+      
+      const squareCoords = [
+        [lat - d, lon - d],
+        [lat - d, lon + d],
+        [lat + d, lon + d],
+        [lat + d, lon - d]
+      ];
+      
+      const polygon = L.polygon(squareCoords, { 
+        color: "#10b981", 
+        fillColor: "#10b981", 
+        fillOpacity: 0.2 
+      });
+      
+      // On l'ajoute à la couche d'édition pour qu'il soit modifiable
+      editableLayersRef.current.addLayer(polygon);
+      
+      // On centre et zoome sur le polygone
+      mapRef.current.setView([lat, lon], 15);
+      setSearchResults([]);
+      setSearchQuery("");
+      
+      alert("Ce quartier n'a pas de contour géométrique précis dans OpenStreetMap. Une zone par défaut de 1km x 1km a été créée automatiquement autour de ce point. Vous pouvez l'ajuster en déplaçant ses sommets puis cliquer sur Enregistrer.");
     }
   };
 
@@ -265,7 +420,11 @@ export default function MapDrawer({ initialBoundary, cityName, onSave, onDetectN
             </div>
             <div>
               <h2 className="text-xl font-bold text-white tracking-tight">Tracer la Zone : {cityName}</h2>
-              <p className="text-sm text-zinc-500">Utilisez les outils à gauche pour dessiner le périmètre.</p>
+              <p className="text-xs text-zinc-500 mt-0.5">
+                {otherZones && otherZones.length > 0 
+                  ? `Zones existantes visibles (en bleu) : ${otherZones.map(z => z.name).join(', ')}`
+                  : "Utilisez les outils à gauche pour dessiner le périmètre."}
+              </p>
             </div>
           </div>
           <button onClick={onClose} className="p-2 hover:bg-zinc-900 rounded-xl text-zinc-500 hover:text-white transition-all">

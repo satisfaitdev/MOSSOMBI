@@ -15,6 +15,14 @@ class VirtualCardsScreen extends StatefulWidget {
 }
 
 class _VirtualCardsScreenState extends State<VirtualCardsScreen> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      context.read<WalletProvider>().fetchCards();
+    });
+  }
+
   void _showCreateCardDialog(WalletProvider wallet, bool isDark, Color textColor) {
     String selectedType = 'VISA';
     final labelCtrl = TextEditingController(text: 'Ma Carte');
@@ -64,12 +72,14 @@ class _VirtualCardsScreenState extends State<VirtualCardsScreen> {
           actions: [
             TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Annuler')),
             ElevatedButton(
-              onPressed: () {
-                wallet.createCard(labelCtrl.text.isNotEmpty ? labelCtrl.text : 'Ma Carte', selectedType);
+              onPressed: () async {
                 Navigator.pop(ctx);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('Carte $selectedType créée ! 💳'), backgroundColor: Colors.green),
-                );
+                final card = await wallet.createVirtualCard(labelCtrl.text.isNotEmpty ? labelCtrl.text : 'Ma Carte', selectedType);
+                if (card != null && context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Carte $selectedType créée !'), backgroundColor: Colors.green),
+                  );
+                }
               },
               style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF6C4EF6)),
               child: const Text('Créer', style: TextStyle(color: Colors.white)),
@@ -133,7 +143,6 @@ class _VirtualCardsScreenState extends State<VirtualCardsScreen> {
                       final card = wallet.cards[i];
                       return Column(
                         children: [
-                          // 3D Card Widget
                           Container(
                             height: 200,
                             width: double.infinity,
@@ -181,7 +190,6 @@ class _VirtualCardsScreenState extends State<VirtualCardsScreen> {
                             ),
                           ).animate(delay: (i * 100).ms).fade().scale(begin: const Offset(0.95, 0.95), end: const Offset(1, 1), curve: Curves.easeOut),
 
-                          // Card Actions
                           GlassContainer(
                             padding: const EdgeInsets.all(16),
                             child: Row(
@@ -194,7 +202,15 @@ class _VirtualCardsScreenState extends State<VirtualCardsScreen> {
                                 _cardAction(card.isLocked ? Icons.lock_open_rounded : Icons.lock_rounded,
                                   card.isLocked ? 'Débloquer' : 'Bloquer',
                                   card.isLocked ? Colors.green : const Color(0xFFFF9800),
-                                  () => wallet.toggleCardLock(card.id),
+                                  () async {
+                                    final ok = await wallet.toggleCardLock(card.id);
+                                    if (ok && context.mounted) {
+                                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                                        content: Text(card.isLocked ? 'Carte débloquée' : 'Carte bloquée'),
+                                        backgroundColor: Colors.green,
+                                      ));
+                                    }
+                                  },
                                 ),
                                 _cardAction(Icons.delete_rounded, 'Supprimer', Colors.redAccent, () {
                                   showDialog(
@@ -207,7 +223,10 @@ class _VirtualCardsScreenState extends State<VirtualCardsScreen> {
                                       actions: [
                                         TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Annuler')),
                                         ElevatedButton(
-                                          onPressed: () { Navigator.pop(ctx); wallet.deleteCard(card.id); },
+                                          onPressed: () async {
+                                            Navigator.pop(ctx);
+                                            await wallet.deleteCard(card.id);
+                                          },
                                           style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
                                           child: const Text('Supprimer', style: TextStyle(color: Colors.white)),
                                         ),

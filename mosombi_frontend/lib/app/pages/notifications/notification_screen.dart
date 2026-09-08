@@ -83,12 +83,8 @@ class _NotificationScreenState extends State<NotificationScreen> {
           child: CustomScrollView(
             physics: const BouncingScrollPhysics(),
             slivers: [
-              SliverAppBar(
-                backgroundColor: Colors.transparent,
-                elevation: 0,
-                floating: true,
-                title: Text('Alertes', style: TextStyle(color: textColor, fontSize: 24, fontWeight: FontWeight.w900, letterSpacing: -0.5)),
-                centerTitle: false,
+              MossombiHeaderType1(
+                title: 'Notifications',
                 actions: [
                   if (notifProvider.unreadCount > 0)
                     IconButton(

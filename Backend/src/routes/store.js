@@ -119,7 +119,7 @@ router.post('/checkout', authenticateToken, asyncHandler(async (req, res) => {
       agency_id: art.agency_id,
       service_id: 'store',
       amount,
-      currency: 'CDF',
+      currency: 'XAF',
       client_user_id: req.user.id,
       client_name: value.client_name || '',
       client_phone: value.client_phone || '',
@@ -151,7 +151,7 @@ router.post('/checkout', authenticateToken, asyncHandler(async (req, res) => {
     success: true,
     data: {
       total_amount,
-      currency: 'CDF',
+      currency: 'XAF',
       sales: sales || [],
     },
   });

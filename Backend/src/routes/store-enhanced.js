@@ -35,8 +35,8 @@ const checkoutSchema = Joi.object({
     Joi.object({
       article_id: Joi.string().guid({ version: 'uuidv4' }).required(),
       quantity: Joi.number().integer().min(1).max(100).default(1),
-      selected_variant: Joi.string().allow('').optional(),
-      selected_color: Joi.string().allow('').optional(),
+      selected_variant: Joi.string().allow('', null).optional(),
+      selected_color: Joi.string().allow('', null).optional(),
       wants_loan: Joi.boolean().optional(),
     })
   ).min(1).required(),
@@ -154,6 +154,8 @@ router.get('/products', asyncHandler(async (req, res) => {
       delivery: metadata.delivery || {},
       payment: metadata.payment || {},
       
+      stock: metadata.stock_management?.quantity ?? (product.in_stock === true ? 1 : 0),
+      
       // Champs calculés
       has_promotion: metadata.marketing?.promotion?.active || false,
       promotion_price: metadata.marketing?.promotion?.promotion_price,
@@ -163,8 +165,7 @@ router.get('/products', asyncHandler(async (req, res) => {
       available_countries: metadata.availability?.countries || [],
       delivery_cost: metadata.delivery?.delivery_cost || 0,
       
-      // Filtrer pour le frontend
-      metadata: undefined // Cacher les métadonnées brutes
+      // Garder les métadonnées brutes (le frontend en a besoin)
     };
   });
 
@@ -294,6 +295,19 @@ router.post('/shipping-quote', asyncHandler(async (req, res) => {
   });
 }));
 
+// 🛒 GET /api/v1/store-enhanced/my-orders - Historique des commandes du client
+router.get('/my-orders', authenticateToken, asyncHandler(async (req, res) => {
+  const { data, error } = await dbAdmin
+    .from('agency_sales')
+    .select('*')
+    .eq('client_user_id', req.user.id)
+    .order('created_at', { ascending: false });
+
+  if (error) throw new ValidationError(`Erreur récupération commandes: ${String(error.message || '')}`);
+
+  return res.json({ success: true, data: data || [] });
+}));
+
 // 🛒 POST /api/v1/store-enhanced/checkout - Checkout amélioré
 router.post('/checkout', authenticateToken, asyncHandler(async (req, res) => {
   const { error, value } = checkoutSchema.validate(req.body);
@@ -396,6 +410,7 @@ router.post('/checkout', authenticateToken, asyncHandler(async (req, res) => {
       commission_amount: null,
       metadata: {
         article_name: art.name,
+        article_image: (metadata.media && metadata.media.images && metadata.media.images[0]) ? metadata.media.images[0] : (art.imageUrl || ''),
         unit_price: unit,
         quantity: qty,
         final_amount: final_amount,

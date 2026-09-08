@@ -1,4 +1,3 @@
-import 'dart:io';
 import 'package:dio/dio.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'api_config.dart';
@@ -12,8 +11,8 @@ class ApiClient {
     connectTimeout: const Duration(seconds: 15),
     receiveTimeout: const Duration(seconds: 15),
     headers: {
-      HttpHeaders.contentTypeHeader: 'application/json',
-      HttpHeaders.acceptHeader: 'application/json',
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
     },
   )) {
     _initializeInterceptors();
@@ -25,7 +24,7 @@ class ApiClient {
         // Injecter le token s'il existe
         final token = await _secureStorage.read(key: 'access_token');
         if (token != null && token.isNotEmpty) {
-          options.headers[HttpHeaders.authorizationHeader] = 'Bearer $token';
+          options.headers['Authorization'] = 'Bearer $token';
         }
         return handler.next(options);
       },

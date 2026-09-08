@@ -5,8 +5,6 @@ import '../network/api_client.dart';
 import '../network/api_config.dart';
 import '../models/user_model.dart';
 import '../services/ride_notification_service.dart';
-import 'dart:io';
-import 'dart:convert';
 import 'dart:developer';
 
 // État de l'authentification
@@ -94,23 +92,29 @@ class AuthNotifier extends Notifier<AuthState> {
         final String accessToken = data['access_token'];
         final user = User.fromJson(data['user']);
 
-        await _secureStorage.write(key: 'access_token', value: accessToken);
-        
-        // Sécurité Bancaire : Sauvegarde des identifiants cryptés pour la biométrie
-        await _secureStorage.write(key: 'saved_identifier', value: identifier);
-        await _secureStorage.write(key: 'saved_password', value: password);
+        try {
+          await _secureStorage.write(key: 'access_token', value: accessToken);
+          // Sécurité Bancaire : Sauvegarde des identifiants cryptés pour la biométrie
+          await _secureStorage.write(key: 'saved_identifier', value: identifier);
+          await _secureStorage.write(key: 'saved_password', value: password);
+        } catch (_) {
+          log('Warning: SecureStorage failed (expected on some browsers)');
+        }
         
         state = state.copyWith(isLoading: false, user: user);
 
         // Envoyer la notification push de Bienvenue !
-        RideNotificationService.showWelcomeNotification(user.fullName ?? 'Cher utilisateur');
+        try {
+          await RideNotificationService.showWelcomeNotification(user.fullName ?? 'Cher utilisateur');
+        } catch (_) {} // Ignorer sur web (plugin non supporté)
 
         return true;
       }
     } on DioException catch (e) {
       final message = e.response?.data['error'] ?? e.response?.data['message'] ?? 'Erreur de connexion';
       state = state.copyWith(isLoading: false, error: message);
-    } catch (e) {
+    } catch (e, stack) {
+      log('Login Error: $e\n$stack');
       state = state.copyWith(isLoading: false, error: 'Une erreur s\'est produite');
     }
     return false;
@@ -289,6 +293,84 @@ class AuthNotifier extends Notifier<AuthState> {
       }
     } on DioException catch (e) {
       final message = e.response?.data['error'] ?? 'Impossible de sauvegarder le profil';
+      state = state.copyWith(isLoading: false, error: message);
+    } catch (e) {
+      state = state.copyWith(isLoading: false, error: 'Erreur inattendue');
+    }
+    return false;
+  }
+
+  Future<Map<String, dynamic>?> fetchUserSettings() async {
+    try {
+      final response = await _apiClient.dio.get(ApiConfig.getSettings);
+      if (response.statusCode == 200 && response.data['success']) {
+        return response.data['data'] as Map<String, dynamic>;
+      }
+    } catch (e) {
+      log('Error fetching user settings: $e');
+    }
+    return null;
+  }
+
+  Future<bool> updateSettingsProfile({
+    required String username,
+    required String displayName,
+    required String bio,
+    required String location,
+    required String gender,
+    required String birthDate,
+  }) async {
+    state = state.copyWith(isLoading: true, clearError: true);
+    try {
+      final response = await _apiClient.dio.put(ApiConfig.updateSettingsProfile, data: {
+        if (username.isNotEmpty) 'username': username,
+        if (displayName.isNotEmpty) 'display_name': displayName,
+        'bio': bio,
+        'location': location,
+        'gender': gender,
+        if (birthDate.isNotEmpty) 'birth_date': birthDate,
+      });
+
+      if (response.statusCode == 200 && response.data['success']) {
+        await _checkAuthStatus();
+        return true;
+      }
+    } on DioException catch (e) {
+      final message = e.response?.data['error'] ?? 'Impossible de sauvegarder le profil';
+      state = state.copyWith(isLoading: false, error: message);
+    } catch (e) {
+      state = state.copyWith(isLoading: false, error: 'Erreur inattendue');
+    }
+    return false;
+  }
+
+  Future<bool> updateSettingsNotifications(Map<String, bool> notifications) async {
+    state = state.copyWith(isLoading: true, clearError: true);
+    try {
+      final response = await _apiClient.dio.put(ApiConfig.updateSettingsNotifications, data: notifications);
+      if (response.statusCode == 200 && response.data['success']) {
+        state = state.copyWith(isLoading: false);
+        return true;
+      }
+    } on DioException catch (e) {
+      final message = e.response?.data['error'] ?? 'Impossible de sauvegarder les préférences de notification';
+      state = state.copyWith(isLoading: false, error: message);
+    } catch (e) {
+      state = state.copyWith(isLoading: false, error: 'Erreur inattendue');
+    }
+    return false;
+  }
+
+  Future<bool> updateSettingsPrivacy(Map<String, dynamic> privacy) async {
+    state = state.copyWith(isLoading: true, clearError: true);
+    try {
+      final response = await _apiClient.dio.put(ApiConfig.updateSettingsPrivacy, data: privacy);
+      if (response.statusCode == 200 && response.data['success']) {
+        state = state.copyWith(isLoading: false);
+        return true;
+      }
+    } on DioException catch (e) {
+      final message = e.response?.data['error'] ?? 'Impossible de sauvegarder les paramètres de confidentialité';
       state = state.copyWith(isLoading: false, error: message);
     } catch (e) {
       state = state.copyWith(isLoading: false, error: 'Erreur inattendue');

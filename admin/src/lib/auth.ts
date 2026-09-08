@@ -14,7 +14,11 @@ export type AuthUser = {
 const AUTH_COOKIE_NAME = process.env.AUTH_COOKIE_NAME || 'admin_access_token';
 
 export function getApiBaseUrl() {
-  return process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:3000/api/v1';
+  const url = process.env.NEXT_PUBLIC_API_BASE_URL;
+  if (!url) {
+    throw new Error('NEXT_PUBLIC_API_BASE_URL is not defined in environment variables');
+  }
+  return url;
 }
 
 export async function getAccessToken() {

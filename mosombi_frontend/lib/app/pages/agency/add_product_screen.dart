@@ -44,6 +44,7 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
 
   String _origin = 'Local 📍';
   List<String> _origins = ['Local 📍'];
+  bool _isServiceAvailable = true;
 
   // Champs dynamiques
   final _customSpecsCtrl = TextEditingController();
@@ -266,6 +267,9 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
       } else if (user.phone!.startsWith('+225')) {
         _userCountryFlag = '🇨🇮';
         _userCountryName = 'Côte d\'Ivoire';
+      } else if (user.phone!.startsWith('+241')) {
+        _userCountryFlag = '🇬🇦';
+        _userCountryName = 'Gabon';
       }
     }
     
@@ -278,51 +282,105 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
     }
   }
 
+  String _normalizeCountryName(String name) {
+    String lower = name.toLowerCase().trim();
+    if (lower.contains('brazza') || lower == 'congo' || lower == 'congo-brazzaville' || lower == 'republique du congo') {
+      return 'congo';
+    }
+    if (lower.contains('rdc') || lower.contains('rd congo') || lower.contains('kinshasa') || lower.contains('republique democratique du congo')) {
+      return 'rd congo';
+    }
+    if (lower.contains('gabon')) {
+      return 'gabon';
+    }
+    if (lower.contains('cameroun')) {
+      return 'cameroun';
+    }
+    if (lower.contains('cote') || lower.contains('ivoire')) {
+      return 'cote d\'ivoire';
+    }
+    return lower.replaceAll(RegExp(r'[^a-z0-9]'), '');
+  }
+
+  String _getCountryFlag(String name) {
+    final lower = name.toLowerCase();
+    if (lower.contains('chine')) return '🇨🇳';
+    if (lower.contains('dubai') || lower.contains('dubaï') || lower.contains('uae') || lower.contains('émirats')) return '🇦🇪';
+    if (lower.contains('france') || lower.contains('europe')) return '🇫🇷';
+    if (lower.contains('turquie') || lower.contains('turkey')) return '🇹🇷';
+    if (lower.contains('gabon')) return '🇬🇦';
+    if (lower.contains('cameroun')) return '🇨🇲';
+    if (lower.contains('togo')) return '🇹🇬';
+    if (lower.contains('benin') || lower.contains('bénin')) return '🇧🇯';
+    if (lower.contains('rdc') || lower.contains('kinshasa') || lower.contains('rd congo')) return '🇨🇩';
+    if (lower.contains('congo') || lower.contains('brazza')) return '🇨🇬';
+    if (lower.contains('ivoire') || lower.contains('côte')) return '🇨🇮';
+    return '🌐';
+  }
+
   void _loadDynamicOrigins() {
     final cart = context.read<CartProvider>();
     if (cart.logisticsSettings.isNotEmpty) {
-      final Set<String> uniqueOrigins = {};
+      final List<String> dynamicOrigins = [];
       
-      // Ajouter Local
-      uniqueOrigins.add('Local');
+      final userCountryNormalized = _normalizeCountryName(_userCountryName);
+      final bool isUserCountryAvailable = cart.logisticsSettings.keys.any((key) => _normalizeCountryName(key) == userCountryNormalized);
       
-      // Collecter toutes les origines définies dans la matrice
+      setState(() {
+        _isServiceAvailable = isUserCountryAvailable;
+      });
+
+      if (isUserCountryAvailable) {
+        dynamicOrigins.add('Local $_userCountryFlag');
+      }
+
+      final Set<String> normalizedAdded = {};
+      normalizedAdded.add(userCountryNormalized);
+      normalizedAdded.add('local');
+
       cart.logisticsSettings.forEach((dest, config) {
         if (config is Map && config.containsKey('International')) {
           final intl = config['International'] as Map;
           if (intl.containsKey('origins')) {
-             (intl['origins'] as Map).keys.forEach((o) => uniqueOrigins.add(o.toString()));
+            final originsMap = intl['origins'] as Map;
+            for (var rawOrigin in originsMap.keys) {
+              final String originStr = rawOrigin.toString().trim();
+              final normalized = _normalizeCountryName(originStr);
+              
+              if (!normalizedAdded.contains(normalized) && normalized.isNotEmpty) {
+                normalizedAdded.add(normalized);
+                final String flag = _getCountryFlag(originStr);
+                dynamicOrigins.add('$originStr $flag');
+              }
+            }
           }
         }
       });
 
-      final List<String> dynamicOrigins = [];
-      for (var country in uniqueOrigins) {
-        String flag = '🌐';
-        if (country == 'Local') {
-          flag = _userCountryFlag;
-          dynamicOrigins.add('Local $flag');
-          continue;
-        }
-
-        if (country.contains('Congo') && !country.contains('RDC')) flag = '🇨🇬';
-        else if (country.contains('RDC')) flag = '🇨🇩';
-        else if (country.contains('Chine')) flag = '🇨🇳';
-        else if (country.contains('Dubaï') || country.contains('UAE')) flag = '🇦🇪';
-        else if (country.contains('France')) flag = '🇫🇷';
-        else if (country.contains('Turquie')) flag = '🇹🇷';
-        else if (country.contains('Gabon')) flag = '🇬🇦';
-        else if (country.contains('Cameroun')) flag = '🇨🇲';
-        else if (country.contains('Togo')) flag = '🇹🇬';
-        else if (country.contains('Bénin')) flag = '🇧🇯';
-
-        dynamicOrigins.add('$country $flag');
-      }
-
       setState(() {
         _origins = dynamicOrigins;
-        if (!_origins.contains(_origin)) {
-          _origin = _origins.first;
+
+        if (widget.productToEdit != null) {
+          final rawEditOrigin = widget.productToEdit!.origin;
+          final normalizedEditOrigin = _normalizeCountryName(rawEditOrigin);
+
+          if (normalizedEditOrigin == 'local' || normalizedEditOrigin == userCountryNormalized) {
+            _origin = _origins.firstWhere((o) => o.startsWith('Local'), orElse: () => _origins.isNotEmpty ? _origins.first : 'Local');
+          } else {
+            final matchIndex = _origins.indexWhere((o) => _normalizeCountryName(o) == normalizedEditOrigin);
+            if (matchIndex != -1) {
+              _origin = _origins[matchIndex];
+            } else {
+              final flag = _getCountryFlag(rawEditOrigin);
+              final formatted = '$rawEditOrigin $flag';
+              _origins.add(formatted);
+              _origin = formatted;
+            }
+          }
+        } else {
+          if (!_origins.contains(_origin)) {
+            _origin = _origins.isNotEmpty ? _origins.first : '';
+          }
         }
       });
     }
@@ -420,9 +478,6 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
        }
        _category = widget.productToEdit!.category;
        
-       if (!_origins.contains(widget.productToEdit!.origin)) {
-           _origins.add(widget.productToEdit!.origin);
-       }
        _origin = widget.productToEdit!.origin;
        
        if (widget.productToEdit!.imageUrl.isNotEmpty) {
@@ -1352,6 +1407,39 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
                 const SizedBox(height: 8),
                 Text('Remplissez les informations de votre article pour le rendre visible sur le Marketplace.', style: TextStyle(color: hintColor, fontSize: 14)),
                 const SizedBox(height: 24),
+
+                if (!_isServiceAvailable)
+                  Container(
+                    margin: const EdgeInsets.only(bottom: 24),
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.redAccent.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: Colors.redAccent.withValues(alpha: 0.4)),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.warning_amber_rounded, color: Colors.redAccent, size: 28),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Service non disponible',
+                                style: TextStyle(color: textColor, fontWeight: FontWeight.bold, fontSize: 14),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                'Mossombi n\'est pas encore disponible pour les livraisons dans votre pays (${_userCountryName}). Certaines fonctionnalités logistiques seront restreintes.',
+                                style: TextStyle(color: hintColor, fontSize: 12),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ).animate().shake(),
 
                 // Sélecteur d'Image
                 Column(

@@ -1,4 +1,5 @@
 import 'reflect-metadata';
+import crypto from 'crypto';
 import dotenv from 'dotenv';
 import { DataSource } from 'typeorm';
 import { User } from './entities/User.js';
@@ -217,6 +218,28 @@ async function ensureTaxiTables() {
   await safeQuery('CREATE INDEX IF NOT EXISTS idx_taxi_subscriptions_status ON public.taxi_subscriptions(status)');
   await safeQuery('CREATE INDEX IF NOT EXISTS idx_taxi_subscriptions_period_end ON public.taxi_subscriptions(current_period_end)');
   await safeQuery('CREATE INDEX IF NOT EXISTS idx_taxi_subscriptions_last_usage_day ON public.taxi_subscriptions(last_usage_day)');
+
+  // Seed default plans if empty
+  try {
+    const [{ count }] = await appDataSource.query('SELECT COUNT(*) AS count FROM public.taxi_plans');
+    if (Number(count) === 0) {
+      const now = new Date().toISOString();
+      const defaultPlans = [
+        { id: crypto.randomUUID(), code: 'weekly_1', name: '1 Trajet / Jour (Semaine)', price: 7000, rides_per_day: 1, metadata: { duration_days: 7 } },
+        { id: crypto.randomUUID(), code: 'weekly_2', name: 'Aller/Retour (Semaine)', price: 12000, rides_per_day: 2, metadata: { duration_days: 7 } },
+        { id: crypto.randomUUID(), code: 'weekly_unlimited', name: 'Illimité (Semaine)', price: 18000, rides_per_day: 0, metadata: { duration_days: 7, unlimited: true } },
+        { id: crypto.randomUUID(), code: 'monthly_1', name: '1 Trajet / Jour (Mois)', price: 25000, rides_per_day: 1, metadata: { duration_days: 30 } },
+        { id: crypto.randomUUID(), code: 'monthly_2', name: 'Aller/Retour (Mois)', price: 40000, rides_per_day: 2, metadata: { duration_days: 30 } },
+        { id: crypto.randomUUID(), code: 'monthly_unlimited', name: 'Illimité (Mois)', price: 60000, rides_per_day: 0, metadata: { duration_days: 30, unlimited: true } },
+      ];
+      for (const p of defaultPlans) {
+        await appDataSource.query(`
+          INSERT INTO public.taxi_plans (id, code, name, price, currency, rides_per_day, is_active, metadata, created_at, updated_at)
+          VALUES ($1, $2, $3, $4, 'XAF', $5, true, $6, $7, $7)
+        `, [p.id, p.code, p.name, p.price, p.rides_per_day, JSON.stringify(p.metadata), now]);
+      }
+    }
+  } catch { /* ignore */ }
 }
 
 async function ensureAgenciesTables() {
@@ -351,6 +374,37 @@ async function ensureAgenciesTables() {
   await safeQuery('CREATE INDEX IF NOT EXISTS idx_agency_documents_status ON public.agency_documents(status)');
 
   await safeQuery(`
+      CREATE TABLE IF NOT EXISTS public.agent_profiles (
+        id uuid PRIMARY KEY,
+        user_id uuid NOT NULL UNIQUE,
+        agent_type text NOT NULL DEFAULT 'independant',
+        service_ids text[] NOT NULL DEFAULT '{}',
+        is_online boolean NOT NULL DEFAULT true,
+        latitude numeric NULL,
+        longitude numeric NULL,
+        description text NOT NULL DEFAULT '',
+        phone_visible boolean NOT NULL DEFAULT true,
+        created_at timestamptz NOT NULL DEFAULT now(),
+        updated_at timestamptz NOT NULL DEFAULT now()
+      )
+    `);
+
+  await safeQuery('ALTER TABLE public.agent_profiles ADD COLUMN IF NOT EXISTS user_id uuid');
+  await safeQuery("ALTER TABLE public.agent_profiles ADD COLUMN IF NOT EXISTS agent_type text NOT NULL DEFAULT 'independant'");
+  await safeQuery("ALTER TABLE public.agent_profiles ADD COLUMN IF NOT EXISTS service_ids text[] NOT NULL DEFAULT '{}'");
+  await safeQuery('ALTER TABLE public.agent_profiles ADD COLUMN IF NOT EXISTS is_online boolean NOT NULL DEFAULT true');
+  await safeQuery('ALTER TABLE public.agent_profiles ADD COLUMN IF NOT EXISTS latitude numeric NULL');
+  await safeQuery('ALTER TABLE public.agent_profiles ADD COLUMN IF NOT EXISTS longitude numeric NULL');
+  await safeQuery("ALTER TABLE public.agent_profiles ADD COLUMN IF NOT EXISTS description text NOT NULL DEFAULT ''");
+  await safeQuery('ALTER TABLE public.agent_profiles ADD COLUMN IF NOT EXISTS phone_visible boolean NOT NULL DEFAULT true');
+  await safeQuery('ALTER TABLE public.agent_profiles ADD COLUMN IF NOT EXISTS created_at timestamptz NOT NULL DEFAULT now()');
+  await safeQuery('ALTER TABLE public.agent_profiles ADD COLUMN IF NOT EXISTS updated_at timestamptz NOT NULL DEFAULT now()');
+  await safeQuery('CREATE INDEX IF NOT EXISTS idx_agent_profiles_user ON public.agent_profiles(user_id)');
+  await safeQuery('CREATE INDEX IF NOT EXISTS idx_agent_profiles_online ON public.agent_profiles(is_online)');
+  await safeQuery('CREATE INDEX IF NOT EXISTS idx_agent_profiles_type ON public.agent_profiles(agent_type)');
+  await safeQuery('CREATE INDEX IF NOT EXISTS idx_agent_profiles_services ON public.agent_profiles USING GIN (service_ids)');
+
+  await safeQuery(`
       CREATE TABLE IF NOT EXISTS public.agency_invites (
         id uuid PRIMARY KEY,
         agency_id uuid NOT NULL,
@@ -451,7 +505,7 @@ async function ensureAgenciesTables() {
       agency_id uuid NOT NULL,
       service_id text NOT NULL,
       amount numeric NOT NULL DEFAULT 0,
-      currency text NOT NULL DEFAULT 'CDF',
+      currency text NOT NULL DEFAULT 'XAF',
       client_user_id uuid NULL,
       client_name text NOT NULL DEFAULT '',
       client_phone text NOT NULL DEFAULT '',
@@ -468,7 +522,7 @@ async function ensureAgenciesTables() {
   await safeQuery('ALTER TABLE public.agency_sales ADD COLUMN IF NOT EXISTS agency_id uuid');
   await safeQuery('ALTER TABLE public.agency_sales ADD COLUMN IF NOT EXISTS service_id text');
   await safeQuery('ALTER TABLE public.agency_sales ADD COLUMN IF NOT EXISTS amount numeric NOT NULL DEFAULT 0');
-  await safeQuery("ALTER TABLE public.agency_sales ADD COLUMN IF NOT EXISTS currency text NOT NULL DEFAULT 'CDF'");
+  await safeQuery("ALTER TABLE public.agency_sales ADD COLUMN IF NOT EXISTS currency text NOT NULL DEFAULT 'XAF'");
   await safeQuery('ALTER TABLE public.agency_sales ADD COLUMN IF NOT EXISTS client_user_id uuid NULL');
   await safeQuery("ALTER TABLE public.agency_sales ADD COLUMN IF NOT EXISTS client_name text NOT NULL DEFAULT ''");
   await safeQuery("ALTER TABLE public.agency_sales ADD COLUMN IF NOT EXISTS client_phone text NOT NULL DEFAULT ''");
@@ -589,6 +643,131 @@ async function ensureAdsTable() {
   }
 }
 
+async function ensureFintechTables() {
+  const safeQuery = async (sql, { label = '', critical = false } = {}) => {
+    try {
+      await appDataSource.query(sql);
+    } catch (e) {
+      if (critical) {
+        console.error('DB init query failed', { label, message: e?.message, code: e?.code });
+        throw e;
+      }
+    }
+  };
+
+  await safeQuery(`
+    CREATE TABLE IF NOT EXISTS public.bill_payments (
+      id uuid PRIMARY KEY,
+      user_id uuid NOT NULL,
+      provider text NOT NULL,
+      amount numeric NOT NULL DEFAULT 0,
+      reference text NOT NULL DEFAULT '',
+      status text NOT NULL DEFAULT 'pending',
+      created_at timestamptz NOT NULL DEFAULT now()
+    )
+  `, { label: 'create bill_payments', critical: true });
+  await safeQuery('ALTER TABLE public.bill_payments ADD COLUMN IF NOT EXISTS user_id uuid');
+  await safeQuery('ALTER TABLE public.bill_payments ADD COLUMN IF NOT EXISTS provider text');
+  await safeQuery('ALTER TABLE public.bill_payments ADD COLUMN IF NOT EXISTS amount numeric NOT NULL DEFAULT 0');
+  await safeQuery('ALTER TABLE public.bill_payments ADD COLUMN IF NOT EXISTS reference text');
+  await safeQuery("ALTER TABLE public.bill_payments ADD COLUMN IF NOT EXISTS status text NOT NULL DEFAULT 'pending'");
+  await safeQuery('ALTER TABLE public.bill_payments ADD COLUMN IF NOT EXISTS created_at timestamptz NOT NULL DEFAULT now()');
+  await safeQuery('CREATE INDEX IF NOT EXISTS idx_bill_payments_user ON public.bill_payments(user_id)');
+  await safeQuery('CREATE INDEX IF NOT EXISTS idx_bill_payments_status ON public.bill_payments(status)');
+
+  await safeQuery(`
+    CREATE TABLE IF NOT EXISTS public.savings_accounts (
+      id uuid PRIMARY KEY,
+      user_id uuid NOT NULL,
+      balance numeric NOT NULL DEFAULT 0,
+      created_at timestamptz NOT NULL DEFAULT now()
+    )
+  `, { label: 'create savings_accounts', critical: true });
+  await safeQuery('ALTER TABLE public.savings_accounts ADD COLUMN IF NOT EXISTS user_id uuid');
+  await safeQuery('ALTER TABLE public.savings_accounts ADD COLUMN IF NOT EXISTS balance numeric NOT NULL DEFAULT 0');
+  await safeQuery('ALTER TABLE public.savings_accounts ADD COLUMN IF NOT EXISTS created_at timestamptz NOT NULL DEFAULT now()');
+  await safeQuery('CREATE UNIQUE INDEX IF NOT EXISTS idx_savings_accounts_user ON public.savings_accounts(user_id)');
+
+  await safeQuery(`
+    CREATE TABLE IF NOT EXISTS public.savings_goals (
+      id uuid PRIMARY KEY,
+      user_id uuid NOT NULL,
+      name text NOT NULL,
+      target_amount numeric NOT NULL DEFAULT 0,
+      current_amount numeric NOT NULL DEFAULT 0,
+      deadline timestamptz NULL,
+      created_at timestamptz NOT NULL DEFAULT now()
+    )
+  `, { label: 'create savings_goals', critical: true });
+  await safeQuery('ALTER TABLE public.savings_goals ADD COLUMN IF NOT EXISTS user_id uuid');
+  await safeQuery('ALTER TABLE public.savings_goals ADD COLUMN IF NOT EXISTS name text');
+  await safeQuery('ALTER TABLE public.savings_goals ADD COLUMN IF NOT EXISTS target_amount numeric NOT NULL DEFAULT 0');
+  await safeQuery('ALTER TABLE public.savings_goals ADD COLUMN IF NOT EXISTS current_amount numeric NOT NULL DEFAULT 0');
+  await safeQuery('ALTER TABLE public.savings_goals ADD COLUMN IF NOT EXISTS deadline timestamptz NULL');
+  await safeQuery('ALTER TABLE public.savings_goals ADD COLUMN IF NOT EXISTS created_at timestamptz NOT NULL DEFAULT now()');
+  await safeQuery('CREATE INDEX IF NOT EXISTS idx_savings_goals_user ON public.savings_goals(user_id)');
+
+  await safeQuery(`
+    CREATE TABLE IF NOT EXISTS public.savings_transactions (
+      id uuid PRIMARY KEY,
+      savings_id uuid NOT NULL,
+      type text NOT NULL,
+      amount numeric NOT NULL DEFAULT 0,
+      created_at timestamptz NOT NULL DEFAULT now()
+    )
+  `, { label: 'create savings_transactions', critical: true });
+  await safeQuery('ALTER TABLE public.savings_transactions ADD COLUMN IF NOT EXISTS savings_id uuid');
+  await safeQuery('ALTER TABLE public.savings_transactions ADD COLUMN IF NOT EXISTS type text');
+  await safeQuery('ALTER TABLE public.savings_transactions ADD COLUMN IF NOT EXISTS amount numeric NOT NULL DEFAULT 0');
+  await safeQuery('ALTER TABLE public.savings_transactions ADD COLUMN IF NOT EXISTS created_at timestamptz NOT NULL DEFAULT now()');
+  await safeQuery('CREATE INDEX IF NOT EXISTS idx_savings_transactions_savings ON public.savings_transactions(savings_id)');
+
+  await safeQuery(`
+    CREATE TABLE IF NOT EXISTS public.virtual_cards (
+      id uuid PRIMARY KEY,
+      user_id uuid NOT NULL,
+      card_number_mask text NOT NULL DEFAULT '',
+      brand text NOT NULL DEFAULT 'VISA',
+      status text NOT NULL DEFAULT 'active',
+      label text NOT NULL DEFAULT 'Ma Carte',
+      expiry text NOT NULL DEFAULT '',
+      created_at timestamptz NOT NULL DEFAULT now()
+    )
+  `, { label: 'create virtual_cards', critical: true });
+  await safeQuery('ALTER TABLE public.virtual_cards ADD COLUMN IF NOT EXISTS user_id uuid');
+  await safeQuery("ALTER TABLE public.virtual_cards ADD COLUMN IF NOT EXISTS card_number_mask text NOT NULL DEFAULT ''");
+  await safeQuery("ALTER TABLE public.virtual_cards ADD COLUMN IF NOT EXISTS brand text NOT NULL DEFAULT 'VISA'");
+  await safeQuery("ALTER TABLE public.virtual_cards ADD COLUMN IF NOT EXISTS status text NOT NULL DEFAULT 'active'");
+  await safeQuery("ALTER TABLE public.virtual_cards ADD COLUMN IF NOT EXISTS label text NOT NULL DEFAULT 'Ma Carte'");
+  await safeQuery("ALTER TABLE public.virtual_cards ADD COLUMN IF NOT EXISTS expiry text NOT NULL DEFAULT ''");
+  await safeQuery('ALTER TABLE public.virtual_cards ADD COLUMN IF NOT EXISTS created_at timestamptz NOT NULL DEFAULT now()');
+  await safeQuery('CREATE INDEX IF NOT EXISTS idx_virtual_cards_user ON public.virtual_cards(user_id)');
+  await safeQuery('CREATE INDEX IF NOT EXISTS idx_virtual_cards_status ON public.virtual_cards(status)');
+
+  await safeQuery(`
+    CREATE TABLE IF NOT EXISTS public.agent_cash_ins (
+      id uuid PRIMARY KEY,
+      agent_user_id uuid NOT NULL,
+      client_user_id uuid NULL,
+      client_phone text NOT NULL DEFAULT '',
+      amount numeric NOT NULL DEFAULT 0,
+      commission numeric NOT NULL DEFAULT 0,
+      status text NOT NULL DEFAULT 'completed',
+      created_at timestamptz NOT NULL DEFAULT now()
+    )
+  `, { label: 'create agent_cash_ins', critical: true });
+  await safeQuery('ALTER TABLE public.agent_cash_ins ADD COLUMN IF NOT EXISTS agent_user_id uuid');
+  await safeQuery('ALTER TABLE public.agent_cash_ins ADD COLUMN IF NOT EXISTS client_user_id uuid NULL');
+  await safeQuery("ALTER TABLE public.agent_cash_ins ADD COLUMN IF NOT EXISTS client_phone text NOT NULL DEFAULT ''");
+  await safeQuery('ALTER TABLE public.agent_cash_ins ADD COLUMN IF NOT EXISTS amount numeric NOT NULL DEFAULT 0');
+  await safeQuery('ALTER TABLE public.agent_cash_ins ADD COLUMN IF NOT EXISTS commission numeric NOT NULL DEFAULT 0');
+  await safeQuery("ALTER TABLE public.agent_cash_ins ADD COLUMN IF NOT EXISTS status text NOT NULL DEFAULT 'completed'");
+  await safeQuery('ALTER TABLE public.agent_cash_ins ADD COLUMN IF NOT EXISTS created_at timestamptz NOT NULL DEFAULT now()');
+  await safeQuery('CREATE INDEX IF NOT EXISTS idx_agent_cash_ins_agent ON public.agent_cash_ins(agent_user_id)');
+  await safeQuery('CREATE INDEX IF NOT EXISTS idx_agent_cash_ins_client ON public.agent_cash_ins(client_user_id)');
+  await safeQuery('CREATE INDEX IF NOT EXISTS idx_agent_cash_ins_created ON public.agent_cash_ins(created_at)');
+}
+
 async function ensureStoreLogisticsTables() {
   const safeQuery = async (sql) => {
     try {
@@ -667,6 +846,424 @@ async function ensureStoreLogisticsTables() {
   await safeQuery('CREATE INDEX IF NOT EXISTS idx_disputes_status ON public.disputes(status)');
 }
 
+async function ensureSmartCityTables() {
+  const safeQuery = async (sql) => {
+    try {
+      await appDataSource.query(sql);
+    } catch (e) {
+      console.error('ensureSmartCityTables query failed:', e.message);
+    }
+  };
+
+  await safeQuery(`
+    CREATE TABLE IF NOT EXISTS public.property_listings (
+      id uuid PRIMARY KEY,
+      agent_id uuid NOT NULL,
+      type text NOT NULL,
+      transaction text NOT NULL,
+      title text NOT NULL,
+      description text NOT NULL DEFAULT '',
+      price numeric NOT NULL DEFAULT 0,
+      city text NOT NULL DEFAULT '',
+      address text NOT NULL DEFAULT '',
+      lat numeric NULL,
+      lng numeric NULL,
+      surface numeric NULL,
+      rooms integer DEFAULT 0,
+      bedrooms integer DEFAULT 0,
+      bathrooms integer DEFAULT 0,
+      images jsonb NOT NULL DEFAULT '[]'::jsonb,
+      status text NOT NULL DEFAULT 'active',
+      created_at timestamptz NOT NULL DEFAULT now(),
+      updated_at timestamptz NOT NULL DEFAULT now()
+    )
+  `);
+  await safeQuery('CREATE INDEX IF NOT EXISTS idx_property_listings_status ON public.property_listings(status)');
+  await safeQuery('CREATE INDEX IF NOT EXISTS idx_property_listings_city ON public.property_listings(city)');
+  await safeQuery('CREATE INDEX IF NOT EXISTS idx_property_listings_type ON public.property_listings(type)');
+  await safeQuery('CREATE INDEX IF NOT EXISTS idx_property_listings_agent ON public.property_listings(agent_id)');
+  await safeQuery('CREATE INDEX IF NOT EXISTS idx_property_listings_transaction ON public.property_listings(transaction)');
+
+  await safeQuery(`
+    CREATE TABLE IF NOT EXISTS public.property_contacts (
+      id uuid PRIMARY KEY,
+      listing_id uuid NOT NULL,
+      user_id uuid NOT NULL,
+      agent_id uuid NOT NULL,
+      message text NOT NULL DEFAULT '',
+      name text NOT NULL DEFAULT '',
+      phone text NOT NULL DEFAULT '',
+      created_at timestamptz NOT NULL DEFAULT now()
+    )
+  `);
+  await safeQuery('CREATE INDEX IF NOT EXISTS idx_property_contacts_listing ON public.property_contacts(listing_id)');
+  await safeQuery('CREATE INDEX IF NOT EXISTS idx_property_contacts_agent ON public.property_contacts(agent_id)');
+
+  await safeQuery(`
+    CREATE TABLE IF NOT EXISTS public.moving_requests (
+      id uuid PRIMARY KEY,
+      user_id uuid NOT NULL,
+      from_address text NOT NULL DEFAULT '',
+      to_address text NOT NULL DEFAULT '',
+      date timestamptz NULL,
+      volume_estimate text NOT NULL DEFAULT '',
+      notes text NOT NULL DEFAULT '',
+      status text NOT NULL DEFAULT 'pending',
+      created_at timestamptz NOT NULL DEFAULT now()
+    )
+  `);
+  await safeQuery('CREATE INDEX IF NOT EXISTS idx_moving_requests_user ON public.moving_requests(user_id)');
+  await safeQuery('CREATE INDEX IF NOT EXISTS idx_moving_requests_status ON public.moving_requests(status)');
+
+  await safeQuery(`
+    CREATE TABLE IF NOT EXISTS public.delivery_orders (
+      id uuid PRIMARY KEY,
+      user_id uuid NOT NULL,
+      type text NOT NULL,
+      pickup_address text NOT NULL DEFAULT '',
+      dropoff_address text NOT NULL DEFAULT '',
+      pickup_lat numeric NULL,
+      pickup_lng numeric NULL,
+      dropoff_lat numeric NULL,
+      dropoff_lng numeric NULL,
+      description text NOT NULL DEFAULT '',
+      status text NOT NULL DEFAULT 'pending',
+      created_at timestamptz NOT NULL DEFAULT now(),
+      updated_at timestamptz NOT NULL DEFAULT now()
+    )
+  `);
+  await safeQuery('CREATE INDEX IF NOT EXISTS idx_delivery_orders_user ON public.delivery_orders(user_id)');
+  await safeQuery('CREATE INDEX IF NOT EXISTS idx_delivery_orders_status ON public.delivery_orders(status)');
+}
+
+async function ensureDigitalServicesTables() {
+  const safeQuery = async (sql, { label = '', critical = false } = {}) => {
+    try {
+      await appDataSource.query(sql);
+    } catch (e) {
+      if (critical) {
+        console.error('DB init query failed', { label, message: e?.message, code: e?.code });
+        throw e;
+      }
+    }
+  };
+
+  await safeQuery(`
+    CREATE TABLE IF NOT EXISTS public.digital_service_providers (
+      id uuid PRIMARY KEY,
+      name text NOT NULL,
+      category text NOT NULL DEFAULT 'telephone',
+      logo_url text NOT NULL DEFAULT '',
+      requires_phone boolean NOT NULL DEFAULT true,
+      requires_id boolean NOT NULL DEFAULT false,
+      created_at timestamptz NOT NULL DEFAULT now()
+    )
+  `, { label: 'create digital_service_providers', critical: true });
+
+  await safeQuery('ALTER TABLE public.digital_service_providers ADD COLUMN IF NOT EXISTS name text');
+  await safeQuery("ALTER TABLE public.digital_service_providers ADD COLUMN IF NOT EXISTS category text NOT NULL DEFAULT 'telephone'");
+  await safeQuery("ALTER TABLE public.digital_service_providers ADD COLUMN IF NOT EXISTS logo_url text NOT NULL DEFAULT ''");
+  await safeQuery('ALTER TABLE public.digital_service_providers ADD COLUMN IF NOT EXISTS requires_phone boolean NOT NULL DEFAULT true');
+  await safeQuery('ALTER TABLE public.digital_service_providers ADD COLUMN IF NOT EXISTS requires_id boolean NOT NULL DEFAULT false');
+  await safeQuery('ALTER TABLE public.digital_service_providers ADD COLUMN IF NOT EXISTS created_at timestamptz NOT NULL DEFAULT now()');
+  await safeQuery('CREATE INDEX IF NOT EXISTS idx_dsp_category ON public.digital_service_providers(category)');
+
+  await safeQuery(`
+    CREATE TABLE IF NOT EXISTS public.digital_service_products (
+      id uuid PRIMARY KEY,
+      provider_id uuid NOT NULL,
+      name text NOT NULL,
+      price numeric NOT NULL DEFAULT 0,
+      value numeric NOT NULL DEFAULT 0,
+      type text NOT NULL DEFAULT 'topup',
+      duration_days integer NULL,
+      created_at timestamptz NOT NULL DEFAULT now()
+    )
+  `, { label: 'create digital_service_products', critical: true });
+
+  await safeQuery('ALTER TABLE public.digital_service_products ADD COLUMN IF NOT EXISTS provider_id uuid');
+  await safeQuery('ALTER TABLE public.digital_service_products ADD COLUMN IF NOT EXISTS name text');
+  await safeQuery('ALTER TABLE public.digital_service_products ADD COLUMN IF NOT EXISTS price numeric NOT NULL DEFAULT 0');
+  await safeQuery('ALTER TABLE public.digital_service_products ADD COLUMN IF NOT EXISTS value numeric NOT NULL DEFAULT 0');
+  await safeQuery("ALTER TABLE public.digital_service_products ADD COLUMN IF NOT EXISTS type text NOT NULL DEFAULT 'topup'");
+  await safeQuery('ALTER TABLE public.digital_service_products ADD COLUMN IF NOT EXISTS duration_days integer NULL');
+  await safeQuery('ALTER TABLE public.digital_service_products ADD COLUMN IF NOT EXISTS created_at timestamptz NOT NULL DEFAULT now()');
+  await safeQuery('CREATE INDEX IF NOT EXISTS idx_dsprods_provider ON public.digital_service_products(provider_id)');
+
+  await safeQuery(`
+    CREATE TABLE IF NOT EXISTS public.digital_service_purchases (
+      id uuid PRIMARY KEY,
+      user_id uuid NOT NULL,
+      provider_id text NOT NULL,
+      product_id text NOT NULL,
+      recipient text NOT NULL DEFAULT '',
+      amount numeric NOT NULL DEFAULT 0,
+      status text NOT NULL DEFAULT 'pending',
+      created_at timestamptz NOT NULL DEFAULT now()
+    )
+  `, { label: 'create digital_service_purchases', critical: true });
+
+  await safeQuery('ALTER TABLE public.digital_service_purchases ADD COLUMN IF NOT EXISTS user_id uuid');
+  await safeQuery('ALTER TABLE public.digital_service_purchases ADD COLUMN IF NOT EXISTS provider_id text');
+  await safeQuery('ALTER TABLE public.digital_service_purchases ADD COLUMN IF NOT EXISTS product_id text');
+  await safeQuery("ALTER TABLE public.digital_service_purchases ADD COLUMN IF NOT EXISTS recipient text NOT NULL DEFAULT ''");
+  await safeQuery('ALTER TABLE public.digital_service_purchases ADD COLUMN IF NOT EXISTS amount numeric NOT NULL DEFAULT 0');
+  await safeQuery("ALTER TABLE public.digital_service_purchases ADD COLUMN IF NOT EXISTS status text NOT NULL DEFAULT 'pending'");
+  await safeQuery('ALTER TABLE public.digital_service_purchases ADD COLUMN IF NOT EXISTS created_at timestamptz NOT NULL DEFAULT now()');
+  await safeQuery('CREATE INDEX IF NOT EXISTS idx_dspurchases_user ON public.digital_service_purchases(user_id)');
+  await safeQuery('CREATE INDEX IF NOT EXISTS idx_dspurchases_status ON public.digital_service_purchases(status)');
+  await safeQuery('CREATE INDEX IF NOT EXISTS idx_dspurchases_created ON public.digital_service_purchases(created_at)');
+}
+
+async function ensureTravelTables() {
+  const safeQuery = async (sql, { label = '', critical = false } = {}) => {
+    try {
+      await appDataSource.query(sql);
+    } catch (e) {
+      if (critical) {
+        console.error('DB init query failed', { label, message: e?.message, code: e?.code });
+        throw e;
+      }
+    }
+  };
+
+  await safeQuery(`
+    CREATE TABLE IF NOT EXISTS public.bus_lines (
+      id uuid PRIMARY KEY,
+      agency text NOT NULL DEFAULT '',
+      departure_city text NOT NULL DEFAULT '',
+      destination_city text NOT NULL DEFAULT '',
+      departure_time text NOT NULL DEFAULT '',
+      arrival_time text NOT NULL DEFAULT '',
+      price numeric NOT NULL DEFAULT 0,
+      currency text NOT NULL DEFAULT 'XAF',
+      total_seats integer NOT NULL DEFAULT 40,
+      available_seats integer NOT NULL DEFAULT 40,
+      is_active boolean NOT NULL DEFAULT true,
+      created_at timestamptz NOT NULL DEFAULT now(),
+      updated_at timestamptz NOT NULL DEFAULT now()
+    )
+  `, { label: 'create bus_lines' });
+
+  await safeQuery(`
+    CREATE TABLE IF NOT EXISTS public.bus_bookings (
+      id uuid PRIMARY KEY,
+      bus_line_id uuid NOT NULL,
+      user_id uuid NOT NULL,
+      seat_number text NOT NULL DEFAULT '',
+      passenger_name text NOT NULL DEFAULT '',
+      passenger_phone text NOT NULL DEFAULT '',
+      departure_date timestamptz NOT NULL,
+      status text NOT NULL DEFAULT 'confirmed',
+      amount numeric NOT NULL DEFAULT 0,
+      currency text NOT NULL DEFAULT 'XAF',
+      created_at timestamptz NOT NULL DEFAULT now(),
+      updated_at timestamptz NOT NULL DEFAULT now()
+    )
+  `, { label: 'create bus_bookings' });
+
+  await safeQuery(`
+    CREATE TABLE IF NOT EXISTS public.carpool_listings (
+      id uuid PRIMARY KEY,
+      driver_user_id uuid NOT NULL,
+      departure_city text NOT NULL DEFAULT '',
+      destination_city text NOT NULL DEFAULT '',
+      departure_date timestamptz NOT NULL,
+      departure_time text NOT NULL DEFAULT '',
+      price numeric NOT NULL DEFAULT 0,
+      currency text NOT NULL DEFAULT 'XAF',
+      seats_available integer NOT NULL DEFAULT 1,
+      vehicle_info text NOT NULL DEFAULT '',
+      notes text NOT NULL DEFAULT '',
+      status text NOT NULL DEFAULT 'active',
+      created_at timestamptz NOT NULL DEFAULT now(),
+      updated_at timestamptz NOT NULL DEFAULT now()
+    )
+  `, { label: 'create carpool_listings' });
+
+  await safeQuery(`
+    CREATE TABLE IF NOT EXISTS public.carpool_bookings (
+      id uuid PRIMARY KEY,
+      listing_id uuid NOT NULL,
+      passenger_user_id uuid NOT NULL,
+      seats integer NOT NULL DEFAULT 1,
+      total_price numeric NOT NULL DEFAULT 0,
+      currency text NOT NULL DEFAULT 'XAF',
+      status text NOT NULL DEFAULT 'pending',
+      message text NOT NULL DEFAULT '',
+      created_at timestamptz NOT NULL DEFAULT now(),
+      updated_at timestamptz NOT NULL DEFAULT now()
+    )
+  `, { label: 'create carpool_bookings' });
+
+  await safeQuery(`
+    CREATE TABLE IF NOT EXISTS public.flight_bookings (
+      id uuid PRIMARY KEY,
+      user_id uuid NOT NULL,
+      flight_number text NOT NULL DEFAULT '',
+      airline text NOT NULL DEFAULT '',
+      departure_city text NOT NULL DEFAULT '',
+      destination_city text NOT NULL DEFAULT '',
+      departure_date timestamptz NOT NULL,
+      return_date timestamptz NULL,
+      passenger_name text NOT NULL DEFAULT '',
+      passenger_email text NOT NULL DEFAULT '',
+      passenger_phone text NOT NULL DEFAULT '',
+      seat_class text NOT NULL DEFAULT 'economy',
+      amount numeric NOT NULL DEFAULT 0,
+      currency text NOT NULL DEFAULT 'XAF',
+      status text NOT NULL DEFAULT 'confirmed',
+      created_at timestamptz NOT NULL DEFAULT now(),
+      updated_at timestamptz NOT NULL DEFAULT now()
+    )
+  `, { label: 'create flight_bookings' });
+
+  await safeQuery(`
+    CREATE TABLE IF NOT EXISTS public.train_lines (
+      id uuid PRIMARY KEY,
+      operator text NOT NULL DEFAULT '',
+      departure_city text NOT NULL DEFAULT '',
+      destination_city text NOT NULL DEFAULT '',
+      departure_time text NOT NULL DEFAULT '',
+      arrival_time text NOT NULL DEFAULT '',
+      price numeric NOT NULL DEFAULT 0,
+      currency text NOT NULL DEFAULT 'XAF',
+      total_seats integer NOT NULL DEFAULT 200,
+      available_seats integer NOT NULL DEFAULT 200,
+      is_active boolean NOT NULL DEFAULT true,
+      created_at timestamptz NOT NULL DEFAULT now(),
+      updated_at timestamptz NOT NULL DEFAULT now()
+    )
+  `, { label: 'create train_lines' });
+
+  await safeQuery(`
+    CREATE TABLE IF NOT EXISTS public.train_bookings (
+      id uuid PRIMARY KEY,
+      train_line_id uuid NOT NULL,
+      user_id uuid NOT NULL,
+      seat_number text NOT NULL DEFAULT '',
+      passenger_name text NOT NULL DEFAULT '',
+      passenger_phone text NOT NULL DEFAULT '',
+      departure_date timestamptz NOT NULL,
+      status text NOT NULL DEFAULT 'confirmed',
+      amount numeric NOT NULL DEFAULT 0,
+      currency text NOT NULL DEFAULT 'XAF',
+      created_at timestamptz NOT NULL DEFAULT now(),
+      updated_at timestamptz NOT NULL DEFAULT now()
+    )
+  `, { label: 'create train_bookings' });
+
+  await safeQuery(`
+    CREATE TABLE IF NOT EXISTS public.ferry_lines (
+      id uuid PRIMARY KEY,
+      operator text NOT NULL DEFAULT '',
+      departure_city text NOT NULL DEFAULT '',
+      destination_city text NOT NULL DEFAULT '',
+      departure_time text NOT NULL DEFAULT '',
+      arrival_time text NOT NULL DEFAULT '',
+      price numeric NOT NULL DEFAULT 0,
+      currency text NOT NULL DEFAULT 'XAF',
+      cabin_types jsonb NOT NULL DEFAULT '[]'::jsonb,
+      is_active boolean NOT NULL DEFAULT true,
+      created_at timestamptz NOT NULL DEFAULT now(),
+      updated_at timestamptz NOT NULL DEFAULT now()
+    )
+  `, { label: 'create ferry_lines' });
+
+  await safeQuery(`
+    CREATE TABLE IF NOT EXISTS public.ferry_bookings (
+      id uuid PRIMARY KEY,
+      ferry_line_id uuid NOT NULL,
+      user_id uuid NOT NULL,
+      cabin_type text NOT NULL DEFAULT 'standard',
+      passenger_name text NOT NULL DEFAULT '',
+      passenger_phone text NOT NULL DEFAULT '',
+      departure_date timestamptz NOT NULL,
+      status text NOT NULL DEFAULT 'confirmed',
+      amount numeric NOT NULL DEFAULT 0,
+      currency text NOT NULL DEFAULT 'XAF',
+      created_at timestamptz NOT NULL DEFAULT now(),
+      updated_at timestamptz NOT NULL DEFAULT now()
+    )
+  `, { label: 'create ferry_bookings' });
+
+  await safeQuery(`
+    CREATE TABLE IF NOT EXISTS public.car_rentals (
+      id uuid PRIMARY KEY,
+      agency_id uuid NULL,
+      vehicle_name text NOT NULL DEFAULT '',
+      vehicle_type text NOT NULL DEFAULT '',
+      transmission text NOT NULL DEFAULT 'manual',
+      seats integer NOT NULL DEFAULT 5,
+      price_per_day numeric NOT NULL DEFAULT 0,
+      currency text NOT NULL DEFAULT 'XAF',
+      location_city text NOT NULL DEFAULT '',
+      with_driver_available boolean NOT NULL DEFAULT false,
+      image_url text NOT NULL DEFAULT '',
+      is_available boolean NOT NULL DEFAULT true,
+      created_at timestamptz NOT NULL DEFAULT now(),
+      updated_at timestamptz NOT NULL DEFAULT now()
+    )
+  `, { label: 'create car_rentals' });
+
+  await safeQuery(`
+    CREATE TABLE IF NOT EXISTS public.car_rental_bookings (
+      id uuid PRIMARY KEY,
+      vehicle_id uuid NOT NULL,
+      user_id uuid NOT NULL,
+      pickup_date timestamptz NOT NULL,
+      return_date timestamptz NOT NULL,
+      total_days integer NOT NULL DEFAULT 1,
+      total_price numeric NOT NULL DEFAULT 0,
+      currency text NOT NULL DEFAULT 'XAF',
+      driver_name text NOT NULL DEFAULT '',
+      driver_phone text NOT NULL DEFAULT '',
+      with_driver boolean NOT NULL DEFAULT false,
+      status text NOT NULL DEFAULT 'confirmed',
+      created_at timestamptz NOT NULL DEFAULT now(),
+      updated_at timestamptz NOT NULL DEFAULT now()
+    )
+  `, { label: 'create car_rental_bookings' });
+
+  await safeQuery(`
+    CREATE TABLE IF NOT EXISTS public.tourist_sites (
+      id uuid PRIMARY KEY,
+      name text NOT NULL DEFAULT '',
+      city text NOT NULL DEFAULT '',
+      description text NOT NULL DEFAULT '',
+      category text NOT NULL DEFAULT 'nature',
+      latitude numeric NULL,
+      longitude numeric NULL,
+      image_url text NOT NULL DEFAULT '',
+      rating text NOT NULL DEFAULT '4.5',
+      entry_fee numeric NOT NULL DEFAULT 0,
+      currency text NOT NULL DEFAULT 'XAF',
+      is_active boolean NOT NULL DEFAULT true,
+      created_at timestamptz NOT NULL DEFAULT now(),
+      updated_at timestamptz NOT NULL DEFAULT now()
+    )
+  `, { label: 'create tourist_sites' });
+
+  await safeQuery(`
+    CREATE TABLE IF NOT EXISTS public.tour_guides (
+      id uuid PRIMARY KEY,
+      name text NOT NULL DEFAULT '',
+      city text NOT NULL DEFAULT '',
+      phone text NOT NULL DEFAULT '',
+      email text NOT NULL DEFAULT '',
+      languages text NOT NULL DEFAULT '[]',
+      specialties text NOT NULL DEFAULT '[]',
+      rating text NOT NULL DEFAULT '4.5',
+      price_per_hour numeric NOT NULL DEFAULT 0,
+      currency text NOT NULL DEFAULT 'XAF',
+      is_available boolean NOT NULL DEFAULT true,
+      avatar_url text NOT NULL DEFAULT '',
+      created_at timestamptz NOT NULL DEFAULT now(),
+      updated_at timestamptz NOT NULL DEFAULT now()
+    )
+  `, { label: 'create tour_guides' });
+}
+
 export async function initDatabase() {
   if (appDataSource.isInitialized) return appDataSource;
   await appDataSource.initialize();
@@ -676,5 +1273,7 @@ export async function initDatabase() {
   await ensureAgenciesTables();
   await ensureTaxiTables();
   await ensureStoreLogisticsTables();
+  await ensureSmartCityTables();
+  await ensureTravelTables();
   return appDataSource;
 }

@@ -19,7 +19,7 @@ const router = express.Router();
 const backpackItemSchema = Joi.object({
   name: Joi.string().min(1).max(100).required(),
   description: Joi.string().max(500).optional(),
-  category: Joi.string().valid('achievement', 'reward', 'badge', 'item').required(),
+  category: Joi.string().valid('achievement', 'reward', 'badge', 'item', 'subscription').required(),
   rarity: Joi.string().valid('common', 'rare', 'epic', 'legendary').default('common'),
   metadata: Joi.object().optional()
 });

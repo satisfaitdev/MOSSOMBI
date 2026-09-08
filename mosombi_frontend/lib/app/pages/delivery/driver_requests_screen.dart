@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import 'package:mosombi_frontend/core/theme/app_colors.dart';
 import 'package:mosombi_frontend/core/widgets/animated_gradient_bg.dart';
 import 'package:mosombi_frontend/core/widgets/glass_container.dart';
+import 'package:mosombi_frontend/core/network/api_client.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 
 class DriverRequestsScreen extends StatefulWidget {
@@ -13,26 +14,38 @@ class DriverRequestsScreen extends StatefulWidget {
 }
 
 class _DriverRequestsScreenState extends State<DriverRequestsScreen> {
+  final ApiClient _apiClient = ApiClient();
   bool _isOnline = false;
+  bool _isLoading = false;
+  List<Map<String, dynamic>> _requests = [];
 
-  final List<Map<String, dynamic>> _mockRequests = [
-    {
-      'id': 'REQ-1029',
-      'pickup': 'Marché Total, Bacongo',
-      'dropoff': '12 Rue Alizés, Poto-Poto',
-      'distance': '3.2 km',
-      'price': '1500 FCFA',
-      'type': 'Marketplace',
-    },
-    {
-      'id': 'REQ-1030',
-      'pickup': 'Restaurant Chez Maman',
-      'dropoff': 'Plateau des 15 ans',
-      'distance': '1.5 km',
-      'price': '800 FCFA',
-      'type': 'Food',
+  Future<void> _fetchRequests() async {
+    if (!_isOnline) return;
+    setState(() => _isLoading = true);
+    try {
+      final response = await _apiClient.dio.get('/delivery/requests');
+      if (response.statusCode == 200 && response.data['success'] == true) {
+        final List data = response.data['data'] ?? [];
+        _requests = data.map((r) => {
+          'id': r['id']?.toString() ?? '',
+          'pickup': r['pickup_address']?.toString() ?? r['pickup']?.toString() ?? '',
+          'dropoff': r['dropoff_address']?.toString() ?? r['dropoff']?.toString() ?? '',
+          'distance': r['distance']?.toString() ?? '',
+          'price': '${r['price'] ?? ''} FCFA',
+          'type': r['type']?.toString() ?? 'Livraison',
+        }).toList();
+      }
+    } catch (e) {
+      debugPrint('Error fetching delivery requests: $e');
     }
-  ];
+    setState(() => _isLoading = false);
+  }
+
+  void _toggleOnline(bool val) {
+    setState(() => _isOnline = val);
+    if (val) _fetchRequests();
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(val ? 'Vous êtes en ligne.' : 'Vous êtes hors ligne.')));
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -50,10 +63,7 @@ class _DriverRequestsScreenState extends State<DriverRequestsScreen> {
           Switch(
             value: _isOnline,
             activeColor: Colors.green,
-            onChanged: (val) {
-              setState(() => _isOnline = val);
-              ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(val ? 'Vous êtes en ligne.' : 'Vous êtes hors ligne.')));
-            },
+            onChanged: _toggleOnline,
           ),
           const SizedBox(width: 8),
         ],
@@ -108,9 +118,9 @@ class _DriverRequestsScreenState extends State<DriverRequestsScreen> {
           child: ListView.builder(
             padding: const EdgeInsets.symmetric(horizontal: 16),
             physics: const BouncingScrollPhysics(),
-            itemCount: _mockRequests.length,
+            itemCount: _requests.length,
             itemBuilder: (context, index) {
-              final req = _mockRequests[index];
+              final req = _requests[index];
               return Padding(
                 padding: const EdgeInsets.only(bottom: 16),
                 child: GlassContainer(
@@ -162,7 +172,8 @@ class _DriverRequestsScreenState extends State<DriverRequestsScreen> {
                         Expanded(
                           child: OutlinedButton(
                             onPressed: () {
-                              setState(() => _mockRequests.removeAt(index));
+                              setState(() => _requests.removeAt(index));
+                              _apiClient.dio.post('/delivery/requests/${req['id']}/decline');
                             },
                             style: OutlinedButton.styleFrom(
                               foregroundColor: Colors.red,
@@ -177,7 +188,11 @@ class _DriverRequestsScreenState extends State<DriverRequestsScreen> {
                         Expanded(
                           child: ElevatedButton(
                             onPressed: () {
-                              context.push('/delivery/active', extra: req['id']);
+                              _apiClient.dio.post('/delivery/requests/${req['id']}/accept').then((_) {
+                                context.push('/delivery/active', extra: req['id']);
+                              }, onError: (_) {
+                                context.push('/delivery/active', extra: req['id']);
+                              });
                             },
                             style: ElevatedButton.styleFrom(
                               backgroundColor: const Color(0xFF00E5C5),

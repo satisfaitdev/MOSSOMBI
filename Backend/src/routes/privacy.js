@@ -5,9 +5,14 @@
 
 import express from 'express';
 import Joi from 'joi';
+import fs from 'fs';
+import path from 'path';
+import os from 'os';
+import bcrypt from 'bcryptjs';
 import { dbAdmin } from '../config/db.js';
 import { authenticateToken } from '../middleware/authMiddleware.js';
 import { asyncHandler, ValidationError } from '../middleware/errorHandler.js';
+import { logger } from '../utils/logger.js';
 const router = express.Router();
 
 // Schéma de validation pour les paramètres de confidentialité
@@ -40,7 +45,7 @@ const privacySettingsSchema = Joi.object({
  * Récupérer les paramètres de confidentialité de l'utilisateur
  */
 router.get('/settings', authenticateToken, asyncHandler(async (req, res) => {
-  console.log('🔒 Privacy Settings - Récupération pour utilisateur:', req.user.id);
+  logger.info('Privacy Settings - Récupération pour utilisateur: ' + req.user.id);
 
   // Récupérer les paramètres depuis la base de données
   const { data: user, error } = await dbAdmin
@@ -50,7 +55,7 @@ router.get('/settings', authenticateToken, asyncHandler(async (req, res) => {
     .single();
 
   if (error) {
-    console.error('❌ Erreur récupération paramètres privacy:', error);
+    logger.error('Erreur récupération paramètres privacy: ' + error.message);
     throw new Error('Impossible de récupérer les paramètres de confidentialité');
   }
 
@@ -98,8 +103,8 @@ router.get('/settings', authenticateToken, asyncHandler(async (req, res) => {
  * Mettre à jour les paramètres de confidentialité
  */
 router.put('/settings', authenticateToken, asyncHandler(async (req, res) => {
-  console.log('🔒 Privacy Settings - Mise à jour pour utilisateur:', req.user.id);
-  console.log('📝 Nouveaux paramètres:', req.body);
+  logger.info('Privacy Settings - Mise à jour pour utilisateur: ' + req.user.id);
+  logger.info('Nouveaux paramètres: ' + JSON.stringify(req.body));
 
   // Validation des données
   const { error, value } = privacySettingsSchema.validate(req.body);
@@ -121,11 +126,11 @@ router.put('/settings', authenticateToken, asyncHandler(async (req, res) => {
     .single();
 
   if (updateError) {
-    console.error('❌ Erreur mise à jour paramètres privacy:', updateError);
+    logger.error('Erreur mise à jour paramètres privacy: ' + updateError.message);
     throw new Error('Impossible de mettre à jour les paramètres de confidentialité');
   }
 
-  console.log('✅ Paramètres de confidentialité mis à jour avec succès');
+  logger.info('Paramètres de confidentialité mis à jour avec succès');
 
   res.json({
     success: true,
@@ -141,7 +146,7 @@ router.put('/settings', authenticateToken, asyncHandler(async (req, res) => {
  * Exporter toutes les données personnelles de l'utilisateur
  */
 router.post('/export-data', authenticateToken, asyncHandler(async (req, res) => {
-  console.log('📥 Export Data - Demande pour utilisateur:', req.user.id);
+  logger.info('Export Data - Demande pour utilisateur: ' + req.user.id);
 
   try {
     // Récupérer toutes les données de l'utilisateur
@@ -200,72 +205,84 @@ router.post('/export-data', authenticateToken, asyncHandler(async (req, res) => 
       }
     };
 
-    console.log('✅ Export des données préparé avec succès');
+    logger.info('Export des données préparé avec succès');
 
-    res.json({
-      success: true,
-      message: 'Export des données préparé avec succès',
-      data: {
-        download_url: `data:application/json;charset=utf-8,${encodeURIComponent(JSON.stringify(exportData, null, 2))}`,
-        data: exportData
+    // Écrire dans un fichier temporaire et le servir en téléchargement
+    const tmpDir = os.tmpdir();
+    const tmpFile = path.join(tmpDir, `mossombi-export-${req.user.id}-${Date.now()}.json`);
+    fs.writeFileSync(tmpFile, JSON.stringify(exportData, null, 2), 'utf8');
+
+    res.download(tmpFile, `mossombi-export-${Date.now()}.json`, (err) => {
+      fs.unlink(tmpFile, () => {});
+      if (err) {
+        logger.error('Erreur envoi fichier export: ' + err.message);
       }
     });
 
   } catch (error) {
-    console.error('❌ Erreur export données:', error);
+    logger.error('Erreur export données: ' + error.message);
     throw new Error('Impossible d\'exporter les données');
   }
 }));
 
 /**
  * DELETE /api/v1/profile/delete-account
- * Supprimer définitivement le compte utilisateur
+ * Supprimer le compte utilisateur (soft delete avec vérification mot de passe)
  */
 router.delete('/delete-account', authenticateToken, asyncHandler(async (req, res) => {
-  console.log('🗑️ Delete Account - Demande pour utilisateur:', req.user.id);
+  const { password } = req.body;
+  if (!password) {
+    throw new ValidationError('Le mot de passe est requis pour supprimer le compte');
+  }
+
+  logger.info('Delete Account - Demande pour utilisateur: ' + req.user.id);
 
   try {
-    // 1. Supprimer les transactions du wallet
-    const { error: walletError } = await dbAdmin
-      .from('wallet_transactions')
-      .delete()
-      .eq('user_id', req.user.id);
+    // Vérifier le mot de passe
+    const { data: user } = await dbAdmin
+      .from('users')
+      .select('password_hash, deleted_at')
+      .eq('id', req.user.id)
+      .single();
 
-    if (walletError) {
-      console.error('❌ Erreur suppression transactions wallet:', walletError);
+    if (!user || user.deleted_at) {
+      throw new ValidationError('Compte non trouvé ou déjà supprimé');
     }
 
-    // 2. Supprimer les notifications
-    const { error: notifError } = await dbAdmin
-      .from('notifications')
-      .delete()
-      .eq('user_id', req.user.id);
-
-    if (notifError) {
-      console.error('❌ Erreur suppression notifications:', notifError);
+    const isPasswordValid = await bcrypt.compare(password, user.password_hash);
+    if (!isPasswordValid) {
+      throw new ValidationError('Mot de passe incorrect');
     }
 
-    // 3. Supprimer le profil utilisateur
+    // Soft delete : marquer le compte comme supprimé au lieu de le supprimer
+    const now = new Date().toISOString();
     const { error: userError } = await dbAdmin
       .from('users')
-      .delete()
+      .update({ is_active: false, deleted_at: now, updated_at: now })
       .eq('id', req.user.id);
 
     if (userError) {
-      console.error('❌ Erreur suppression utilisateur:', userError);
+      logger.error('Erreur soft delete utilisateur: ' + userError.message);
       throw new Error('Impossible de supprimer le compte utilisateur');
     }
 
-    console.log('✅ Compte utilisateur supprimé avec succès');
+    // Désactiver les sessions actives
+    await dbAdmin
+      .from('user_sessions')
+      .update({ is_active: false, terminated_at: now })
+      .eq('user_id', req.user.id)
+      .eq('is_active', true);
+
+    logger.info('Compte utilisateur supprimé (soft) avec succès');
 
     res.json({
       success: true,
-      message: 'Votre compte a été supprimé définitivement. Nous sommes désolés de vous voir partir.'
+      message: 'Votre compte a été désactivé. Nous sommes désolés de vous voir partir.'
     });
 
   } catch (error) {
-    console.error('❌ Erreur suppression compte:', error);
-    throw new Error('Impossible de supprimer le compte');
+    logger.error('Erreur suppression compte: ' + error.message);
+    throw error;
   }
 }));
 

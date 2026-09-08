@@ -1,0 +1,32 @@
+workflows:
+  ios-build:
+    name: Mossombi iOS Build
+    instance_type: mac_mini_m2
+    max_build_duration: 60
+    working_directory: mosombi_frontend
+    environment:
+      flutter: stable
+      xcode: latest
+    triggering:
+      events:
+        - push
+        - tag
+      branch_patterns:
+        - pattern: 'main'
+          include: true
+          source: true
+    scripts:
+      - name: Flutter pub get
+        script: flutter pub get
+      - name: Build iOS Release (unsigned)
+        script: flutter build ios --release --no-codesign
+    artifacts:
+      - mosombi_frontend/build/ios/iphoneos/*.app
+      - build/ios/iphoneos/*.app
+    publishing:
+      email:
+        recipients:
+          - dev@mossombi.com
+        notify:
+          success: true
+          failure: true

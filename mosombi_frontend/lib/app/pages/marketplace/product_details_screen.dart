@@ -6,6 +6,8 @@ import 'package:mosombi_frontend/core/providers/cart_provider.dart';
 import 'package:mosombi_frontend/core/providers/auth_provider.dart';
 import 'package:mosombi_frontend/core/theme/app_colors.dart';
 import 'package:mosombi_frontend/core/widgets/glass_container.dart';
+import 'package:mosombi_frontend/core/widgets/custom_app_bars.dart';
+import 'package:mosombi_frontend/core/widgets/custom_button.dart';
 import 'package:mosombi_frontend/core/widgets/product_image.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:go_router/go_router.dart';
@@ -88,53 +90,10 @@ class _ProductDetailsScreenState extends ConsumerState<ProductDetailsScreen> {
     return Scaffold(
       extendBodyBehindAppBar: true,
       backgroundColor: isDark ? const Color(0xFF12121D) : const Color(0xFFF6F8FB),
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        leadingWidth: 72, // give more space for the leading widget
-        leading: Padding(
-          padding: const EdgeInsets.only(left: 16),
-          child: IconButton(
-            icon: Container(
-              padding: const EdgeInsets.all(12), // Augmenté pour un clic facile
-              decoration: BoxDecoration(
-                color: Colors.black.withValues(alpha: 0.4),
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.white, size: 20),
-            ),
-            onPressed: () => context.pop(),
-          ),
-        ),
-        actions: [
-          IconButton(
-            icon: Stack(
-              clipBehavior: Clip.none,
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.black.withValues(alpha: 0.4),
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(Icons.shopping_bag_rounded, color: Colors.white, size: 20),
-                ),
-                if (cart.itemCount > 0)
-                  Positioned(
-                    right: -4,
-                    top: -4,
-                    child: Container(
-                      padding: const EdgeInsets.all(4),
-                      decoration: const BoxDecoration(color: Colors.redAccent, shape: BoxShape.circle),
-                      child: Text('${cart.itemCount}', style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
-                    ),
-                  ),
-              ],
-            ),
-            onPressed: () => context.push('/cart'),
-          ),
-          const SizedBox(width: 12),
-        ],
+      appBar: MossombiHeaderType4(
+        actionIcon: const Icon(Icons.shopping_bag_rounded, color: Colors.white, size: 20),
+        onActionTap: () => context.push('/cart'),
+        badgeCount: cart.itemCount,
       ),
       body: SingleChildScrollView(
         physics: const BouncingScrollPhysics(),
@@ -610,7 +569,7 @@ class _ProductDetailsScreenState extends ConsumerState<ProductDetailsScreen> {
           color: isDark ? const Color(0xFF1E1E2C) : Colors.white,
           boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.1), blurRadius: 20, offset: const Offset(0, -5))],
         ),
-        child: ElevatedButton.icon(
+        child: MosombiButton.primary(
           onPressed: outOfStock ? null : () {
             if (_isBulkMode) {
               List<Map<String, dynamic>> selections = [];
@@ -660,16 +619,8 @@ class _ProductDetailsScreenState extends ConsumerState<ProductDetailsScreen> {
               ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${widget.product.name} ajouté au panier'), backgroundColor: AppColors.violet, behavior: SnackBarBehavior.floating));
             }
           },
-          icon: const Icon(Icons.add_shopping_cart_rounded, color: Colors.white),
-          label: Text(outOfStock ? 'Indisponible' : (_isBulkMode ? 'Ajouter la sélection' : 'Ajouter au Panier'), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 16)),
-          style: ElevatedButton.styleFrom(
-            minimumSize: const Size(double.infinity, 60),
-            backgroundColor: const Color(0xFF6C4EF6),
-            disabledBackgroundColor: Colors.grey,
-            elevation: 10,
-            shadowColor: const Color(0xFF6C4EF6).withValues(alpha: 0.3),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-          ),
+          icon: Icons.add_shopping_cart_rounded,
+          text: outOfStock ? 'Indisponible' : (_isBulkMode ? 'Ajouter la sélection' : 'Ajouter au Panier'),
         ),
       ),
     );
@@ -879,7 +830,9 @@ class _ProductDetailsScreenState extends ConsumerState<ProductDetailsScreen> {
     
     if (!countries.contains(_selectedDestination)) _selectedDestination = countries.first;
 
-    final origin = (widget.product.origin ?? 'Local').contains('Local') ? 'Local' : 'International';
+    final rawOrigin = widget.product.origin ?? 'Local';
+    final bool isLocal = rawOrigin.contains('Local') || rawOrigin.contains('Congo-Brazzaville') || rawOrigin.contains('Congo Brazza');
+    final origin = isLocal ? 'Local' : 'International';
     final options = matrix[_selectedDestination]?[origin] ?? {};
 
     return Column(
@@ -986,7 +939,7 @@ class _ProductDetailsScreenState extends ConsumerState<ProductDetailsScreen> {
     if (countryData is! Map) return const SizedBox.shrink();
     
     final productOrigin = widget.product.origin ?? 'Local';
-    final bool isLocal = productOrigin.contains('Local');
+    final bool isLocal = productOrigin.contains('Local') || productOrigin.contains('Congo-Brazzaville') || productOrigin.contains('Congo Brazza');
     
     final sectionKey = isLocal ? 'Local' : 'International';
     final sectionData = countryData[sectionKey] ?? {};

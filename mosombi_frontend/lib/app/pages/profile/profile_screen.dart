@@ -144,81 +144,33 @@ class ProfileScreen extends ConsumerWidget {
             ),
           ),
 
-          // Espace Agence (Mandatory Prompt Requirement)
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-              child: GestureDetector(
-                onTap: () async {
-                  if (agencyProvider.currentAgent == null || agencyProvider.currentAgency?.status == 'pending' || agencyProvider.currentAgent?.status == 'pending') {
-                    // Vérification silencieuse de dernière minute au cas où l'utilisateur vient tout juste d'être accepté
-                    await context.read<AgencyProvider>().checkMyAgencyContext();
-                  }
 
-                  final updatedProvider = context.read<AgencyProvider>();
-                  final hasPending = updatedProvider.currentAgency?.status == 'pending' || updatedProvider.currentAgent?.status == 'pending';
-                  final isManager = ['owner', 'sub_agent', 'admin', 'manager'].contains(updatedProvider.roleInAgency);
-                  
-                  if (hasPending) {
-                    context.push('/create-agency');
-                  } else if (updatedProvider.currentAgent != null) {
-                    if (isManager) {
-                      context.push('/agency-dashboard');
-                    } else {
-                      context.push('/agent-dashboard');
-                    }
-                  } else {
-                    context.push('/agency-onboarding');
-                  }
-                },
-                child: GlassContainer(
-                  padding: const EdgeInsets.all(20),
-                  child: Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          gradient: AppGradients.primary,
-                          shape: BoxShape.circle,
-                          boxShadow: [
-                            BoxShadow(color: AppColors.violet.withValues(alpha: 0.3), blurRadius: 10, offset: const Offset(0, 4))
-                          ],
-                        ),
-                        child: const Icon(Icons.storefront_rounded, color: Colors.white, size: 28),
-                      ),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(agencyProvider.roleInAgency == 'agent' ? 'Espace Agent' : 'Espace Agence', style: TextStyle(color: textColor, fontSize: 18, fontWeight: FontWeight.w900, letterSpacing: -0.2)),
-                            const SizedBox(height: 4),
-                            Text(agencyProvider.roleInAgency == 'agent' ? 'Gérez vos ventes sur le terrain' : 'Créer, rejoindre ou gérer votre réseau', style: TextStyle(color: hintColor, fontSize: 12)),
-                          ],
-                        ),
-                      ),
-                      Icon(Icons.arrow_forward_ios_rounded, color: hintColor, size: 16),
-                    ],
-                  ),
-                ),
-              ).animate(delay: 350.ms).fade().slideX(begin: 0.2, end: 0),
-            ),
-          ),
 
-          // Main Setting Options (Grid)
+          // Main Setting Options (Row)
           SliverPadding(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-            sliver: SliverGrid.count(
-              crossAxisCount: 2,
-              mainAxisSpacing: 16,
-              crossAxisSpacing: 16,
-              childAspectRatio: 1.5,
-              children: [
-                _buildQuickAction('Portefeuille', Icons.account_balance_wallet_rounded, const Color(0xFF00E5C5), textColor),
-                _buildQuickAction('Adresses', Icons.location_on_rounded, const Color(0xFFFF6584), textColor),
-                _buildQuickAction('Paiements', Icons.credit_card_rounded, const Color(0xFF6C4EF6), textColor),
-                _buildQuickAction('Sécurité', Icons.shield_rounded, const Color(0xFF4CAF50), textColor),
-              ].animate(interval: 100.ms, delay: 400.ms).fade().slideY(begin: 0.2, end: 0),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+            sliver: SliverToBoxAdapter(
+              child: Row(
+                children: [
+                  Expanded(child: _buildQuickAction('Portefeuille', Icons.account_balance_wallet_rounded, const Color(0xFF00E5C5), textColor, onTap: () => context.push('/fintech'))),
+                  const SizedBox(width: 8),
+                  Expanded(child: _buildQuickAction('Sac à Dos', Icons.backpack_rounded, const Color(0xFF6C4EF6), textColor, onTap: () => context.push('/profile/backpack'))),
+                  const SizedBox(width: 8),
+                  Expanded(child: _buildQuickAction('Historique', Icons.history_rounded, const Color(0xFF6C4EF6), textColor, onTap: () => context.push('/fintech/cards'))),
+                  const SizedBox(width: 8),
+                  Expanded(child: _buildQuickAction('Agence', Icons.storefront_rounded, const Color(0xFF4CAF50), textColor, onTap: () {
+                    if (agencyProvider.currentAgent == null || agencyProvider.currentAgency?.status == 'pending' || agencyProvider.currentAgent?.status == 'pending') {
+                      context.read<AgencyProvider>().checkMyAgencyContext();
+                    }
+                    final a = context.read<AgencyProvider>();
+                    final hasPending = a.currentAgency?.status == 'pending' || a.currentAgent?.status == 'pending';
+                    final isManager = ['owner', 'sub_agent', 'admin', 'manager'].contains(a.roleInAgency);
+                    if (hasPending) { context.push('/create-agency'); }
+                    else if (a.currentAgent != null) { context.push(isManager ? '/agency-dashboard' : '/agent-dashboard'); }
+                    else { context.push('/agency-onboarding'); }
+                  })),
+                ],
+              ).animate(delay: 400.ms).fade().slideY(begin: 0.2, end: 0),
             ),
           ),
 
@@ -235,7 +187,19 @@ class ProfileScreen extends ConsumerWidget {
                   padding: EdgeInsets.zero,
                   child: Column(
                     children: [
-                      _buildListTile('Notifications', Icons.notifications_active_rounded, textColor),
+                      _buildListTile(
+                        'Paramètres',
+                        Icons.settings_rounded,
+                        textColor,
+                        onTap: () => context.push('/profile/settings'),
+                      ),
+                      Divider(color: hintColor.withValues(alpha: 0.1), height: 1),
+                      _buildListTile(
+                        'Notifications',
+                        Icons.notifications_active_rounded,
+                        textColor,
+                        onTap: () => context.push('/profile/settings/notifications'),
+                      ),
                       Divider(color: hintColor.withValues(alpha: 0.1), height: 1),
                       _buildListTile('Langue', Icons.language_rounded, textColor, trailing: 'Français'),
                       Divider(color: hintColor.withValues(alpha: 0.1), height: 1),
@@ -295,7 +259,8 @@ class ProfileScreen extends ConsumerWidget {
                       if (confirm == true && context.mounted) {
                         await ref.read(authProvider.notifier).logout();
                         if (context.mounted) context.go('/auth/login');
-                      }
+}
+
                     },
                     icon: const Icon(Icons.logout_rounded, color: Colors.redAccent),
                     label: const Text('Déconnexion', style: TextStyle(color: Colors.redAccent, fontSize: 16, fontWeight: FontWeight.bold)),
@@ -317,28 +282,31 @@ class ProfileScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildQuickAction(String title, IconData icon, Color color, Color textColor) {
-    return GlassContainer(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.15),
-              shape: BoxShape.circle,
+  Widget _buildQuickAction(String title, IconData icon, Color color, Color textColor, {VoidCallback? onTap}) {
+    return GestureDetector(
+      onTap: onTap,
+      child: GlassContainer(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: color.withValues(alpha: 0.15),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(icon, color: color, size: 24),
             ),
-            child: Icon(icon, color: color, size: 24),
-          ),
-          Text(title, style: TextStyle(color: textColor, fontWeight: FontWeight.bold, fontSize: 14)),
-        ],
+            Text(title, style: TextStyle(color: textColor, fontWeight: FontWeight.bold, fontSize: 11)),
+          ],
+        ),
       ),
     );
   }
 
-  Widget _buildListTile(String title, IconData icon, Color textColor, {String? trailing, bool isSwitch = false, bool switchValue = false}) {
+  Widget _buildListTile(String title, IconData icon, Color textColor, {String? trailing, bool isSwitch = false, bool switchValue = false, VoidCallback? onTap}) {
     return ListTile(
       contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
       leading: Container(
@@ -364,7 +332,7 @@ class ProfileScreen extends ConsumerWidget {
                 Icon(Icons.arrow_forward_ios_rounded, color: textColor.withValues(alpha: 0.3), size: 14),
               ],
             ),
-      onTap: () {},
+      onTap: onTap,
     );
   }
 

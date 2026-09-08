@@ -7,16 +7,28 @@ import '../../../core/widgets/animated_gradient_bg.dart';
 import 'package:provider/provider.dart';
 import '../../../core/providers/wallet_provider.dart';
 
-class SavingsScreen extends StatelessWidget {
+class SavingsScreen extends StatefulWidget {
   const SavingsScreen({super.key});
+  @override
+  State<SavingsScreen> createState() => _SavingsScreenState();
+}
+
+class _SavingsScreenState extends State<SavingsScreen> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      context.read<WalletProvider>().fetchSavingsBalance();
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
     final wallet = context.watch<WalletProvider>();
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final textColor = isDark ? Colors.white : AppColors.bgDark1;
-    final primary = const Color(0xFFFFA000); // Orange épargne
-    
+    final primary = const Color(0xFFFFA000);
+
     final savingsTxs = wallet.transactions.where((t) => t.type == TransactionType.savingsDeposit || t.type == TransactionType.savingsWithdraw).take(10).toList();
 
     return Scaffold(
@@ -30,6 +42,13 @@ class SavingsScreen extends StatelessWidget {
           icon: Icon(Icons.arrow_back_ios_new_rounded, color: textColor),
           onPressed: () => context.pop(),
         ),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.flag_rounded, color: Color(0xFFFFA000)),
+            onPressed: () => _showGoalDialog(context, wallet, primary, textColor, isDark),
+            tooltip: 'Objectifs',
+          ),
+        ],
       ),
       body: AnimatedGradientBg(
         isDark: isDark,
@@ -39,7 +58,6 @@ class SavingsScreen extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Balance Card
                 GlassContainer(
                   padding: const EdgeInsets.all(24),
                   child: Row(
@@ -64,40 +82,13 @@ class SavingsScreen extends StatelessWidget {
 
                 const SizedBox(height: 16),
 
-                // Interest Info
-                Row(
-                  children: [
-                    Expanded(
-                      child: GlassContainer(
-                        padding: const EdgeInsets.all(16),
-                        child: Column(
-                          children: [
-                            const Icon(Icons.trending_up_rounded, color: Colors.green, size: 28),
-                            const SizedBox(height: 8),
-                            Text('+ 4.5%', style: TextStyle(color: textColor, fontSize: 18, fontWeight: FontWeight.bold)),
-                            Text('Taux annuel', style: TextStyle(color: textColor.withValues(alpha: 0.6), fontSize: 12)),
-                          ],
-                        ),
-                      ).animate().fade(delay: 100.ms).slideY(begin: 0.2, end: 0, curve: Curves.easeOutCubic),
-                    ),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: GlassContainer(
-                        padding: const EdgeInsets.all(16),
-                        child: Column(
-                          children: [
-                            const Icon(Icons.calendar_month_rounded, color: Color(0xFF6C4EF6), size: 28),
-                            const SizedBox(height: 8),
-                            Text('4 518 F', style: TextStyle(color: textColor, fontSize: 18, fontWeight: FontWeight.bold)),
-                            Text('Intérêts gagnés', style: TextStyle(color: textColor.withValues(alpha: 0.6), fontSize: 12)),
-                          ],
-                        ),
-                      ).animate().fade(delay: 200.ms).slideY(begin: 0.2, end: 0, curve: Curves.easeOutCubic),
-                    ),
-                  ],
-                ),
+                Row(children: [
+                  Expanded(child: _actionBtn('Déposer', Icons.add_circle_rounded, primary, textColor, () => _showDepositDialog(context, wallet, primary, textColor, isDark))),
+                  const SizedBox(width: 12),
+                  Expanded(child: _actionBtn('Retirer', Icons.remove_circle_rounded, Colors.redAccent, textColor, () => _showWithdrawDialog(context, wallet, textColor, isDark))),
+                ]),
+                const SizedBox(height: 24),
 
-                const SizedBox(height: 32),
                 Text('Historique', style: TextStyle(color: textColor, fontSize: 18, fontWeight: FontWeight.bold)),
                 const SizedBox(height: 16),
 
@@ -107,29 +98,25 @@ class SavingsScreen extends StatelessWidget {
                 }),
                 if (savingsTxs.isEmpty)
                    Padding(padding: const EdgeInsets.only(top: 20), child: Center(child: Text("Aucune épargne enregistrée", style: TextStyle(color: textColor.withValues(alpha: 0.5))))),
-                
               ],
             ),
           ),
         ),
       ),
-      bottomNavigationBar: Container(
-        padding: const EdgeInsets.all(24),
-        decoration: BoxDecoration(
-          color: isDark ? const Color(0xFF1E1E2C) : Colors.white,
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-          boxShadow: [
-            BoxShadow(color: Colors.black.withValues(alpha: 0.1), blurRadius: 20, offset: const Offset(0, -5))
-          ]
-        ),
-        child: ElevatedButton(
-          onPressed: () => _showDepositDialog(context, wallet, primary, textColor, isDark),
-          style: ElevatedButton.styleFrom(
-            backgroundColor: primary,
-            padding: const EdgeInsets.symmetric(vertical: 16),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          ),
-          child: const Text('Nouveau Dépôt', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+    );
+  }
+
+  Widget _actionBtn(String label, IconData icon, Color color, Color textColor, VoidCallback onTap) {
+    return GestureDetector(
+      onTap: onTap,
+      child: GlassContainer(
+        padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
+        child: Column(
+          children: [
+            Icon(icon, color: color, size: 28),
+            const SizedBox(height: 8),
+            Text(label, style: TextStyle(color: textColor, fontWeight: FontWeight.bold, fontSize: 13)),
+          ],
         ),
       ),
     );
@@ -209,6 +196,115 @@ class SavingsScreen extends StatelessWidget {
               }
             },
             child: const Text('Confirmer', style: TextStyle(color: Colors.white)),
+          )
+        ],
+      )
+    );
+  }
+
+  void _showWithdrawDialog(BuildContext context, WalletProvider wallet, Color textColor, bool isDark) {
+    final ctrl = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: isDark ? AppColors.bgDark2 : Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        title: Text('Retrait Épargne', style: TextStyle(color: textColor, fontWeight: FontWeight.bold)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Solde Épargne: ${wallet.savingsBalance.toStringAsFixed(0)} FCFA', style: TextStyle(color: textColor.withValues(alpha: 0.7), fontSize: 12)),
+            const SizedBox(height: 16),
+            TextField(
+              controller: ctrl,
+              keyboardType: TextInputType.number,
+              style: TextStyle(color: textColor, fontSize: 24, fontWeight: FontWeight.bold),
+              decoration: InputDecoration(
+                hintText: 'Montant à retirer...',
+                hintStyle: TextStyle(color: Colors.grey.withValues(alpha: 0.5)),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Annuler')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
+            onPressed: () async {
+              final amt = double.tryParse(ctrl.text.replaceAll(' ', ''));
+              if (amt != null && amt > 0) {
+                 Navigator.pop(ctx);
+                 final ok = await wallet.withdrawFromSavings(amt);
+                 if (ok && context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Retrait effectué ✅'), backgroundColor: Colors.green));
+                 } else if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Solde épargne insuffisant'), backgroundColor: Colors.redAccent));
+                 }
+              }
+            },
+            child: const Text('Retirer', style: TextStyle(color: Colors.white)),
+          )
+        ],
+      )
+    );
+  }
+
+  void _showGoalDialog(BuildContext context, WalletProvider wallet, Color primary, Color textColor, bool isDark) {
+    final nameCtrl = TextEditingController();
+    final targetCtrl = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: isDark ? AppColors.bgDark2 : Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        title: Text('Objectif d\'épargne', style: TextStyle(color: textColor, fontWeight: FontWeight.bold)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: nameCtrl,
+              style: TextStyle(color: textColor),
+              decoration: InputDecoration(
+                labelText: 'Nom de l\'objectif',
+                labelStyle: TextStyle(color: Colors.grey),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: targetCtrl,
+              keyboardType: TextInputType.number,
+              style: TextStyle(color: textColor),
+              decoration: InputDecoration(
+                labelText: 'Montant cible (FCFA)',
+                labelStyle: TextStyle(color: Colors.grey),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Annuler')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: primary),
+            onPressed: () async {
+              final name = nameCtrl.text.trim();
+              final target = double.tryParse(targetCtrl.text.replaceAll(' ', ''));
+              if (name.isNotEmpty && target != null && target > 0) {
+                Navigator.pop(ctx);
+                try {
+                  final response = await wallet.dio.post('/savings/goal', data: {'name': name, 'target_amount': target});
+                  if (response.statusCode == 200 && context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Objectif créé ✅'), backgroundColor: Colors.green));
+                  }
+                } catch (e) {
+                  debugPrint('Goal creation error: $e');
+                }
+              }
+            },
+            child: const Text('Créer', style: TextStyle(color: Colors.white)),
           )
         ],
       )

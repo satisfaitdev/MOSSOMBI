@@ -32,7 +32,7 @@ const transactionFiltersSchema = Joi.object({
 
 const createTransactionSchema = Joi.object({
   type: Joi.string().valid('recharge', 'payment', 'transfer', 'withdrawal', 'refund', 'bonus').required(),
-  amount: Joi.number().min(100).max(1000000).required(), // 100 CDF à 1M CDF
+  amount: Joi.number().min(100).max(1000000).required(), // 100 FCFA à 1M FCFA
   description: Joi.string().max(200).optional(),
   recipient_id: Joi.string().uuid().optional(), // Pour les transferts
   payment_method: Joi.string().valid('mobile_money', 'bank_card', 'bank_transfer', 'system').optional(),
@@ -109,7 +109,7 @@ router.get('/', authenticateToken, asyncHandler(async (req, res) => {
     data: {
       wallet: {
         balance: wallet?.balance || 0,
-        currency: wallet?.currency || 'CDF',
+        currency: wallet?.currency || 'XAF',
         status: wallet?.status || 'active',
         last_transaction_at: wallet?.last_transaction_at
       },
@@ -135,7 +135,7 @@ router.get('/balance', authenticateToken, asyncHandler(async (req, res) => {
     success: true,
     data: {
       balance: wallet?.balance || 0,
-      currency: wallet?.currency || 'CDF'
+      currency: wallet?.currency || 'XAF'
     }
   });
 }));
@@ -313,7 +313,7 @@ router.post('/transactions', authenticateToken, asyncHandler(async (req, res) =>
       transaction_id: transactionId,
       type,
       amount,
-      description: description || `${type.charAt(0).toUpperCase() + type.slice(1)} de ${amount} CDF`,
+      description: description || `${type.charAt(0).toUpperCase() + type.slice(1)} de ${amount} FCFA`,
       recipient_id,
       payment_method,
       status: 'pending',
@@ -647,6 +647,105 @@ router.post('/payment-webhook', asyncHandler(async (req, res) => {
   });
 
   res.json({ success: true, message: 'Webhook successfully processed' });
+}));
+
+// =====================================================
+// 💳 ROUTES ENCAISSEMENT AGENT
+// =====================================================
+
+const cashInSchema = Joi.object({
+  client_phone: Joi.string().min(8).max(20).required(),
+  client_user_id: Joi.string().uuid().optional(),
+  amount: Joi.number().min(100).max(2000000).required(),
+});
+
+/**
+ * POST /api/v1/wallet/agent/cash-in
+ * Encaissement client par agent
+ */
+router.post('/agent/cash-in', authenticateToken, asyncHandler(async (req, res) => {
+  const { error, value } = cashInSchema.validate(req.body);
+  if (error) throw new ValidationError(error.details[0].message, error.details);
+
+  // Vérifier que l'agent a assez de fonds
+  const { data: agentWallet } = await dbAdmin.from('user_wallets').select('balance').eq('user_id', req.user.id).single();
+  if (!agentWallet || agentWallet.balance < value.amount) {
+    throw new ValidationError('Solde agent insuffisant pour cet encaissement');
+  }
+
+  // Déduire du wallet agent
+  await dbAdmin.from('user_wallets').update({ balance: agentWallet.balance - value.amount, last_transaction_at: new Date().toISOString() }).eq('user_id', req.user.id);
+
+  let clientId = value.client_user_id;
+  if (!clientId) {
+    const { data: clientUser } = await dbAdmin.from('users').select('id').eq('phone', value.client_phone).single();
+    if (clientUser) clientId = clientUser.id;
+  }
+
+  // Créditer le wallet client
+  if (clientId) {
+    const { data: clientWallet } = await dbAdmin.from('user_wallets').select('balance').eq('user_id', clientId).single();
+    if (clientWallet) {
+      await dbAdmin.from('user_wallets').update({ balance: clientWallet.balance + value.amount, last_transaction_at: new Date().toISOString() }).eq('user_id', clientId);
+    }
+  }
+
+  // Commission agent (1%)
+  const commission = Math.round(value.amount * 0.01);
+
+  const cashInId = `CASH-${Date.now()}-${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
+  await dbAdmin.from('agent_cash_ins').insert({
+    id: cashInId,
+    agent_user_id: req.user.id,
+    client_user_id: clientId || null,
+    client_phone: value.client_phone,
+    amount: value.amount,
+    commission,
+    status: 'completed',
+    created_at: new Date().toISOString(),
+  });
+
+  // Transaction agent
+  await dbAdmin.from('transactions').insert({
+    user_id: req.user.id,
+    transaction_id: `AGT-${Date.now()}-${Math.random().toString(36).substr(2, 9).toUpperCase()}`,
+    type: 'payment',
+    amount: value.amount,
+    description: `Encaissement client ${value.client_phone} - Commission ${commission} FCFA`,
+    status: 'completed',
+    created_at: new Date().toISOString(),
+  });
+
+  logger.info('Encaissement agent effectué', { agentId: req.user.id, clientPhone: value.client_phone, amount: value.amount, commission });
+
+  res.json({
+    success: true,
+    message: 'Encaissement effectué avec succès',
+    data: { cash_in_id: cashInId, amount: value.amount, commission, client_phone: value.client_phone }
+  });
+}));
+
+/**
+ * GET /api/v1/wallet/agent/transactions
+ * Transactions d'encaissement de l'agent
+ */
+router.get('/agent/transactions', authenticateToken, asyncHandler(async (req, res) => {
+  const { data: cashIns, error } = await dbAdmin.from('agent_cash_ins').select('*').eq('agent_user_id', req.user.id).order('created_at', { ascending: false }).limit(50);
+  if (error) {
+    logger.error('Erreur récupération transactions agent', { userId: req.user.id, error });
+    throw new ValidationError('Erreur lors de la récupération des transactions');
+  }
+  res.json({ success: true, data: { transactions: cashIns || [] } });
+}));
+
+/**
+ * GET /api/v1/wallet/agent/commissions
+ * Commissions gagnées par l'agent
+ */
+router.get('/agent/commissions', authenticateToken, asyncHandler(async (req, res) => {
+  const { data: cashIns } = await dbAdmin.from('agent_cash_ins').select('commission, created_at').eq('agent_user_id', req.user.id);
+  const totalCommission = (cashIns || []).reduce((sum, c) => sum + c.commission, 0);
+  res.json({ success: true, data: { total_commission: totalCommission, commissions: cashIns || [] } });
 }));
 
 export default router;

@@ -1,31 +1,130 @@
 "use client";
 
-import { useState } from "react";
-import { 
-  MapPin, 
-  Navigation, 
-  Package, 
-  Car, 
+import { useEffect, useRef, useState } from "react";
+import {
+  MapPin,
+  Package,
+  Car,
   Filter,
   Search,
-  CheckCircle2,
   Clock,
-  AlertTriangle
+  AlertTriangle,
+  Loader2,
+  Navigation
 } from "lucide-react";
 
 export default function LogisticsMapPage() {
   const [activeTab, setActiveTab] = useState("all");
+  const [drivers, setDrivers] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [stats, setStats] = useState({ enCours: 0, flotteActive: 0, retards: 0 });
+  const mapRef = useRef<any>(null);
+  const mapContainerRef = useRef<HTMLDivElement>(null);
+  const markersRef = useRef<any[]>([]);
 
-  const drivers = [
-    { id: "DRV-001", name: "David M.", status: "busy", type: "Moto", location: "Centre-ville", eta: "5 min", orderId: "ORD-998" },
-    { id: "DRV-002", name: "Sarah K.", status: "available", type: "Voiture", location: "Quartier Nord", eta: "-", orderId: "-" },
-    { id: "DRV-003", name: "Marc A.", status: "busy", type: "Fourgonnette", location: "Aéroport", eta: "15 min", orderId: "ORD-982" },
-    { id: "DRV-004", name: "Éric T.", status: "offline", type: "Moto", location: "-", eta: "-", orderId: "-" },
-  ];
+  useEffect(() => {
+    async function fetchLocations() {
+      setLoading(true);
+      try {
+        const res = await fetch("/api/platform/live-locations", { cache: "no-store" });
+        const json = await res.json().catch(() => null);
+        const data = json?.success ? (json.data || []) : [];
+        const mapped = data.map((d: any, i: number) => ({
+          id: d.id || d._id || `DRV-${String(i + 1).padStart(3, "0")}`,
+          name: d.driver_name || d.name || `Conducteur ${i + 1}`,
+          status: d.status || "available",
+          type: d.vehicle_type || "Moto",
+          location: d.location_name || d.location || "",
+          eta: d.eta || "-",
+          orderId: d.order_id || "-",
+          lat: parseFloat(d.latitude) || 6.37 + (Math.random() - 0.5) * 0.05,
+          lng: parseFloat(d.longitude) || 2.4 + (Math.random() - 0.5) * 0.05,
+        }));
+        setDrivers(mapped);
+        setStats({
+          enCours: mapped.filter((d: any) => d.status === "busy").length,
+          flotteActive: mapped.filter((d: any) => d.status !== "offline").length,
+          retards: mapped.filter((d: any) => d.status === "delayed").length,
+        });
+      } catch (e) {
+        console.error("Failed to fetch live locations:", e);
+      } finally {
+        setLoading(false);
+      }
+    }
+    fetchLocations();
+  }, []);
+
+  useEffect(() => {
+    if (loading || !mapContainerRef.current || mapRef.current) return;
+
+    const injectMap = async () => {
+      if (!document.getElementById("leaflet-css")) {
+        const link = document.createElement("link");
+        link.id = "leaflet-css";
+        link.rel = "stylesheet";
+        link.href = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css";
+        document.head.appendChild(link);
+      }
+
+      if (!(window as any).L) {
+        await new Promise<void>((resolve) => {
+          const script = document.createElement("script");
+          script.src = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js";
+          script.onload = () => resolve();
+          document.body.appendChild(script);
+        });
+      }
+
+      const L = (window as any).L;
+      const map = L.map(mapContainerRef.current).setView([6.37, 2.4], 13);
+      mapRef.current = map;
+
+      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        attribution: "© OpenStreetMap contributors",
+      }).addTo(map);
+
+      drivers.forEach((driver) => {
+        const markerColor =
+          driver.status === "available"
+            ? "#10b981"
+            : driver.status === "busy"
+            ? "#f97316"
+            : "#71717a";
+        const marker = L.circleMarker([driver.lat, driver.lng], {
+          radius: 8,
+          fillColor: markerColor,
+          color: "#fff",
+          weight: 2,
+          opacity: 1,
+          fillOpacity: 0.8,
+        }).addTo(map);
+        marker.bindPopup(
+          `<strong>${driver.name}</strong><br/>Statut: ${driver.status}<br/>Véhicule: ${driver.type}`
+        );
+        markersRef.current.push(marker);
+      });
+
+      if (drivers.length > 0) {
+        const group = L.featureGroup(markersRef.current);
+        map.fitBounds(group.getBounds().pad(0.1));
+      }
+    };
+
+    injectMap();
+
+    return () => {
+      if (mapRef.current) {
+        mapRef.current.remove();
+        mapRef.current = null;
+        markersRef.current = [];
+      }
+    };
+  }, [loading, drivers]);
 
   return (
     <div className="flex flex-col h-[calc(100vh-80px)] p-6 space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-700 ease-out">
-      
+
       {/* Header */}
       <div className="flex items-center justify-between shrink-0">
         <div className="flex items-center gap-3">
@@ -46,31 +145,31 @@ export default function LogisticsMapPage() {
       </div>
 
       <div className="flex-1 grid grid-cols-1 lg:grid-cols-4 gap-6 min-h-0">
-        
+
         {/* Fleet List Panel */}
         <div className="lg:col-span-1 glass-card border border-[#27272a] rounded-2xl flex flex-col overflow-hidden">
           <div className="p-4 border-b border-[#27272a]">
             <div className="relative">
               <Search className="w-4 h-4 text-zinc-500 absolute left-3 top-1/2 -translate-y-1/2" />
-              <input 
-                type="text" 
-                placeholder="Chercher un livreur ou commande..." 
+              <input
+                type="text"
+                placeholder="Chercher un livreur ou commande..."
                 className="w-full bg-zinc-900 border border-[#27272a] rounded-xl pl-9 pr-4 py-2 text-sm text-white focus:outline-none focus:border-emerald-500/50"
               />
             </div>
-            
+
             <div className="flex gap-2 mt-4 overflow-x-auto custom-scrollbar pb-1">
               {[
-                { id: "all", label: "Tous (4)" },
-                { id: "busy", label: "En course (2)" },
-                { id: "available", label: "Libres (1)" }
-              ].map(tab => (
+                { id: "all", label: `Tous (${drivers.length})` },
+                { id: "busy", label: `En course (${drivers.filter(d => d.status === 'busy').length})` },
+                { id: "available", label: `Libres (${drivers.filter(d => d.status === 'available').length})` },
+              ].map((tab) => (
                 <button
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id)}
                   className={`px-3 py-1.5 text-xs font-semibold rounded-lg whitespace-nowrap transition-all ${
-                    activeTab === tab.id 
-                      ? "bg-zinc-800 text-white border border-zinc-700" 
+                    activeTab === tab.id
+                      ? "bg-zinc-800 text-white border border-zinc-700"
                       : "text-zinc-500 hover:text-zinc-300 bg-transparent border border-transparent"
                   }`}
                 >
@@ -81,89 +180,95 @@ export default function LogisticsMapPage() {
           </div>
 
           <div className="flex-1 overflow-y-auto custom-scrollbar p-2 space-y-2">
-            {drivers.filter(d => activeTab === 'all' || d.status === activeTab).map(driver => (
-              <div key={driver.id} className="p-3 bg-zinc-900/50 hover:bg-zinc-800/50 border border-transparent hover:border-zinc-700 rounded-xl cursor-pointer transition-all group">
-                <div className="flex justify-between items-start mb-2">
-                  <div className="flex items-center gap-2">
-                    <div className={`w-2 h-2 rounded-full ${
-                      driver.status === 'available' ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]' :
-                      driver.status === 'busy' ? 'bg-orange-500' : 'bg-zinc-600'
-                    }`} />
-                    <h3 className="font-semibold text-sm text-zinc-200">{driver.name}</h3>
-                  </div>
-                  <span className="text-[10px] text-zinc-500 font-mono">{driver.id}</span>
-                </div>
-                
-                <div className="flex items-center gap-4 text-xs text-zinc-400">
-                  <span className="flex items-center gap-1"><Car className="w-3 h-3" /> {driver.type}</span>
-                  {driver.status === 'busy' && (
-                    <span className="flex items-center gap-1 text-orange-400"><Clock className="w-3 h-3" /> ETA: {driver.eta}</span>
-                  )}
-                </div>
-
-                {driver.status === 'busy' && (
-                  <div className="mt-3 pt-3 border-t border-zinc-800/50 flex justify-between items-center">
-                    <span className="text-[10px] uppercase text-zinc-500 font-medium">Commande</span>
-                    <span className="text-xs font-mono text-zinc-300">{driver.orderId}</span>
-                  </div>
-                )}
+            {loading ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="w-5 h-5 animate-spin text-emerald-500" />
               </div>
-            ))}
+            ) : drivers.filter((d) => activeTab === "all" || d.status === activeTab).length === 0 ? (
+              <p className="text-zinc-500 text-xs text-center py-8">Aucun conducteur trouvé</p>
+            ) : (
+              drivers
+                .filter((d) => activeTab === "all" || d.status === activeTab)
+                .map((driver) => (
+                  <div
+                    key={driver.id}
+                    className="p-3 bg-zinc-900/50 hover:bg-zinc-800/50 border border-transparent hover:border-zinc-700 rounded-xl cursor-pointer transition-all group"
+                  >
+                    <div className="flex justify-between items-start mb-2">
+                      <div className="flex items-center gap-2">
+                        <div
+                          className={`w-2 h-2 rounded-full ${
+                            driver.status === "available"
+                              ? "bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]"
+                              : driver.status === "busy"
+                              ? "bg-orange-500"
+                              : "bg-zinc-600"
+                          }`}
+                        />
+                        <h3 className="font-semibold text-sm text-zinc-200">{driver.name}</h3>
+                      </div>
+                      <span className="text-[10px] text-zinc-500 font-mono">{driver.id}</span>
+                    </div>
+
+                    <div className="flex items-center gap-4 text-xs text-zinc-400">
+                      <span className="flex items-center gap-1">
+                        <Car className="w-3 h-3" /> {driver.type}
+                      </span>
+                      {driver.status === "busy" && (
+                        <span className="flex items-center gap-1 text-orange-400">
+                          <Clock className="w-3 h-3" /> ETA: {driver.eta}
+                        </span>
+                      )}
+                    </div>
+
+                    {driver.status === "busy" && (
+                      <div className="mt-3 pt-3 border-t border-zinc-800/50 flex justify-between items-center">
+                        <span className="text-[10px] uppercase text-zinc-500 font-medium">Commande</span>
+                        <span className="text-xs font-mono text-zinc-300">{driver.orderId}</span>
+                      </div>
+                    )}
+                  </div>
+                ))
+            )}
           </div>
         </div>
 
-        {/* Map Panel (Mocked for UI) */}
-        <div className="lg:col-span-3 glass-card border border-[#27272a] rounded-2xl relative overflow-hidden bg-zinc-950 flex flex-col justify-end p-6">
-          
-          {/* Simulated Map Background - Normally this would be Google Maps / Mapbox */}
-          <div className="absolute inset-0 opacity-20 pointer-events-none" style={{
-            backgroundImage: 'radial-gradient(circle at 50% 50%, #27272a 1px, transparent 1px)',
-            backgroundSize: '24px 24px'
-          }}></div>
-
-          <div className="absolute inset-0 flex items-center justify-center opacity-10 pointer-events-none">
-            <Navigation className="w-64 h-64 text-emerald-500" />
-          </div>
-
-          {/* Map Controls */}
-          <div className="absolute top-4 right-4 flex flex-col gap-2">
-            <button className="w-10 h-10 bg-zinc-900 border border-[#27272a] rounded-xl flex items-center justify-center text-zinc-400 hover:text-white hover:bg-zinc-800">
-              +
-            </button>
-            <button className="w-10 h-10 bg-zinc-900 border border-[#27272a] rounded-xl flex items-center justify-center text-zinc-400 hover:text-white hover:bg-zinc-800">
-              -
-            </button>
-          </div>
+        {/* Map Panel */}
+        <div className="lg:col-span-3 glass-card border border-[#27272a] rounded-2xl relative overflow-hidden bg-zinc-950 flex flex-col justify-end p-0">
+          {loading && (
+            <div className="absolute inset-0 flex items-center justify-center bg-zinc-950/80 z-20">
+              <Loader2 className="w-8 h-8 animate-spin text-emerald-500" />
+            </div>
+          )}
+          <div ref={mapContainerRef} className="w-full h-full min-h-[500px]" />
 
           {/* Map Overlay Stats */}
-          <div className="relative z-10 grid grid-cols-3 gap-4">
+          <div className="absolute bottom-4 left-4 right-4 z-10 grid grid-cols-3 gap-4">
             <div className="bg-zinc-900/80 backdrop-blur-md border border-[#27272a] rounded-xl p-4">
               <div className="flex items-center gap-2 mb-1">
                 <Package className="w-4 h-4 text-blue-400" />
                 <span className="text-xs font-medium text-zinc-400 uppercase tracking-wider">En cours</span>
               </div>
-              <p className="text-2xl font-bold text-white">42</p>
+              <p className="text-2xl font-bold text-white">{stats.enCours}</p>
             </div>
-            
+
             <div className="bg-zinc-900/80 backdrop-blur-md border border-[#27272a] rounded-xl p-4">
               <div className="flex items-center gap-2 mb-1">
                 <Car className="w-4 h-4 text-emerald-400" />
                 <span className="text-xs font-medium text-zinc-400 uppercase tracking-wider">Flotte Active</span>
               </div>
-              <p className="text-2xl font-bold text-white">18</p>
+              <p className="text-2xl font-bold text-white">{stats.flotteActive}</p>
             </div>
-            
+
             <div className="bg-zinc-900/80 backdrop-blur-md border border-rose-500/20 rounded-xl p-4 shadow-[0_0_15px_rgba(225,29,72,0.05)]">
               <div className="flex items-center gap-2 mb-1">
                 <AlertTriangle className="w-4 h-4 text-rose-400" />
                 <span className="text-xs font-medium text-zinc-400 uppercase tracking-wider">Retards signalés</span>
               </div>
-              <p className="text-2xl font-bold text-rose-400">3</p>
+              <p className="text-2xl font-bold text-rose-400">{stats.retards}</p>
             </div>
           </div>
-
         </div>
-
       </div>
     </div>
   );

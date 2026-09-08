@@ -37,6 +37,29 @@ import 'package:mosombi_frontend/app/pages/orders/delivery_tracking_screen.dart'
 import 'package:mosombi_frontend/app/pages/orders/dispute_screen.dart';
 import 'package:mosombi_frontend/app/pages/delivery/driver_requests_screen.dart';
 import 'package:mosombi_frontend/app/pages/delivery/driver_active_delivery_screen.dart';
+import 'package:mosombi_frontend/app/pages/profile/backpack_screen.dart';
+import 'package:mosombi_frontend/app/pages/profile/settings_screen.dart';
+import 'package:mosombi_frontend/app/pages/profile/settings/notification_settings_screen.dart';
+import 'package:mosombi_frontend/app/pages/profile/settings/profile_info_settings_screen.dart';
+import 'package:mosombi_frontend/app/pages/profile/settings/privacy_settings_screen.dart';
+import 'package:mosombi_frontend/app/pages/coins/coins_screen.dart';
+import 'package:mosombi_frontend/app/pages/ticketing/ticketing_screen.dart';
+import 'package:mosombi_frontend/app/pages/smart_city/smart_city_screen.dart';
+import 'package:mosombi_frontend/app/pages/smart_city/add_listing_screen.dart';
+import 'package:mosombi_frontend/app/pages/smart_city/moving_request_screen.dart';
+import 'package:mosombi_frontend/app/pages/smart_city/property_detail_screen.dart';
+import 'package:mosombi_frontend/app/pages/digital_services/digital_services_screen.dart';
+import 'package:mosombi_frontend/app/pages/digital_services/history_screen.dart';
+import 'package:mosombi_frontend/app/pages/digital_services/purchase_screen.dart';
+import 'package:mosombi_frontend/app/pages/travel/travel_screen.dart';
+import 'package:mosombi_frontend/app/pages/travel/bus_search_screen.dart';
+import 'package:mosombi_frontend/app/pages/travel/carpool_screen.dart';
+import 'package:mosombi_frontend/app/pages/travel/flight_search_screen.dart';
+import 'package:mosombi_frontend/app/pages/travel/train_search_screen.dart';
+import 'package:mosombi_frontend/app/pages/travel/ferry_search_screen.dart';
+import 'package:mosombi_frontend/app/pages/travel/car_rental_screen.dart';
+import 'package:mosombi_frontend/app/pages/travel/tourist_sites_screen.dart';
+import 'package:mosombi_frontend/app/pages/travel/travel_assistant_screen.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import 'package:mosombi_frontend/core/providers/product_provider.dart';
@@ -200,8 +223,16 @@ final appRouter = GoRouter(
     GoRoute(
       path: '/orders/tracking',
       builder: (context, state) {
-        final orderId = state.extra as String? ?? 'MSB-XXXX';
-        return DeliveryTrackingScreen(orderId: orderId);
+        final extra = state.extra;
+        String orderId;
+        String? deliveryType;
+        if (extra is Map) {
+          orderId = extra['orderId'] as String? ?? 'MSB-XXXX';
+          deliveryType = extra['deliveryType'] as String?;
+        } else {
+          orderId = extra as String? ?? 'MSB-XXXX';
+        }
+        return DeliveryTrackingScreen(orderId: orderId, deliveryType: deliveryType);
       },
     ),
     GoRoute(
@@ -221,6 +252,107 @@ final appRouter = GoRouter(
         final deliveryId = state.extra as String? ?? 'REQ-XXXX';
         return DriverActiveDeliveryScreen(deliveryId: deliveryId);
       },
+    ),
+    // Coins
+    GoRoute(
+      path: '/coins',
+      builder: (context, state) => const CoinsScreen(),
+    ),
+    // Ticketing
+    GoRoute(
+      path: '/ticketing',
+      builder: (context, state) => const TicketingScreen(),
+    ),
+    // Smart City
+    GoRoute(
+      path: '/smart-city',
+      builder: (context, state) => const SmartCityScreen(),
+    ),
+    GoRoute(
+      path: '/smart-city/add-listing',
+      builder: (context, state) => const AddListingScreen(),
+    ),
+    GoRoute(
+      path: '/smart-city/moving',
+      builder: (context, state) => const MovingRequestScreen(),
+    ),
+    GoRoute(
+      path: '/smart-city/property/:id',
+      builder: (context, state) {
+        final id = state.pathParameters['id']!;
+        return PropertyDetailScreen(id: id);
+      },
+    ),
+    // Digital Services
+    GoRoute(
+      path: '/digital-services',
+      builder: (context, state) => const DigitalServicesScreen(),
+    ),
+    GoRoute(
+      path: '/digital-services/history',
+      builder: (context, state) => const DigitalServicesHistoryScreen(),
+    ),
+    GoRoute(
+      path: '/digital-services/purchase',
+      builder: (context, state) => const PurchaseScreen(),
+    ),
+    // Travel
+    GoRoute(
+      path: '/travel',
+      builder: (context, state) => const TravelScreen(),
+    ),
+    GoRoute(
+      path: '/travel/bus',
+      builder: (context, state) => const BusSearchScreen(),
+    ),
+    GoRoute(
+      path: '/travel/carpool',
+      builder: (context, state) => const CarpoolScreen(),
+    ),
+    GoRoute(
+      path: '/travel/flights',
+      builder: (context, state) => const FlightSearchScreen(),
+    ),
+    GoRoute(
+      path: '/travel/trains',
+      builder: (context, state) => const TrainSearchScreen(),
+    ),
+    GoRoute(
+      path: '/travel/ferries',
+      builder: (context, state) => const FerrySearchScreen(),
+    ),
+    GoRoute(
+      path: '/travel/car-rental',
+      builder: (context, state) => const CarRentalScreen(),
+    ),
+    GoRoute(
+      path: '/travel/tourist-sites',
+      builder: (context, state) => const TouristSitesScreen(),
+    ),
+    GoRoute(
+      path: '/travel/assistant',
+      builder: (context, state) => const TravelAssistantScreen(),
+    ),
+    // Profile routes
+    GoRoute(
+      path: '/profile/backpack',
+      builder: (context, state) => const BackpackScreen(),
+    ),
+    GoRoute(
+      path: '/profile/settings',
+      builder: (context, state) => const SettingsScreen(),
+    ),
+    GoRoute(
+      path: '/profile/settings/notifications',
+      builder: (context, state) => const NotificationSettingsScreen(),
+    ),
+    GoRoute(
+      path: '/profile/settings/profile',
+      builder: (context, state) => const ProfileInfoSettingsScreen(),
+    ),
+    GoRoute(
+      path: '/profile/settings/privacy',
+      builder: (context, state) => const PrivacySettingsScreen(),
     ),
   ],
 );

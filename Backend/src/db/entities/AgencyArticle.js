@@ -15,6 +15,7 @@ export const AgencyArticle = new EntitySchema({
     status: { type: 'text', default: 'active' },
     shipping_unit: { type: 'text', nullable: true },
     shipping_value: { type: 'numeric', precision: 15, scale: 2, nullable: true },
+    image_url: { type: 'text', default: '' },
     metadata: { type: 'jsonb', nullable: true },
     created_at: { type: 'timestamptz', createDate: true },
     updated_at: { type: 'timestamptz', updateDate: true },

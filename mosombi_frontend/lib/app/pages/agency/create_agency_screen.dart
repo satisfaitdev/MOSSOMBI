@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:typed_data';
+import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
@@ -147,16 +148,54 @@ class _CreateAgencyScreenState extends ConsumerState<CreateAgencyScreen> {
       _lat = pos.latitude;
       _long = pos.longitude;
 
-      try {
-        final placemarks = await placemarkFromCoordinates(pos.latitude, pos.longitude);
-        if (placemarks.isNotEmpty) {
-          final p = placemarks.first;
-          _cityController.text = p.locality ?? p.subAdministrativeArea ?? '';
-          _addressController.text = [p.street, p.subLocality, p.locality]
-              .where((s) => s != null && s.isNotEmpty).join(', ');
+      bool geocoded = false;
+
+      // 1) Try native geocoding (works on mobile)
+      if (!kIsWeb) {
+        try {
+          final placemarks = await placemarkFromCoordinates(pos.latitude, pos.longitude);
+          if (placemarks.isNotEmpty) {
+            final p = placemarks.first;
+            _cityController.text = p.locality ?? p.subAdministrativeArea ?? '';
+            _addressController.text = [p.street, p.subLocality, p.locality]
+                .where((s) => s != null && s.isNotEmpty).join(', ');
+            geocoded = true;
+          }
+        } catch (geoErr) {
+          debugPrint('Native geocoding failed: $geoErr');
         }
-      } catch (geoErr) {
-        debugPrint('Geocoding error: $geoErr');
+      }
+
+      // 2) Fallback: Nominatim (OpenStreetMap) reverse geocoding via HTTP (works on web + mobile)
+      if (!geocoded) {
+        try {
+          final uri = Uri.parse(
+            'https://nominatim.openstreetmap.org/reverse?format=json&lat=${pos.latitude}&lon=${pos.longitude}&accept-language=fr',
+          );
+          final response = await _nominatimGet(uri);
+          if (response != null) {
+            final addr = response['address'] as Map<String, dynamic>?;
+            if (addr != null) {
+              _cityController.text = addr['city'] as String? ??
+                  addr['town'] as String? ??
+                  addr['village'] as String? ??
+                  addr['municipality'] as String? ?? '';
+              final parts = <String>[
+                if (addr['road'] != null) addr['road'] as String,
+                if (addr['suburb'] != null) addr['suburb'] as String,
+                if (addr['city'] != null) addr['city'] as String,
+              ];
+              _addressController.text = parts.isNotEmpty ? parts.join(', ') : (response['display_name'] as String? ?? '');
+              geocoded = true;
+            }
+          }
+        } catch (nominatimErr) {
+          debugPrint('Nominatim fallback error: $nominatimErr');
+        }
+      }
+
+      // 3) Last resort: show raw coordinates
+      if (!geocoded) {
         _addressController.text = '${pos.latitude.toStringAsFixed(4)}, ${pos.longitude.toStringAsFixed(4)}';
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -170,6 +209,20 @@ class _CreateAgencyScreenState extends ConsumerState<CreateAgencyScreen> {
     }
     setState(() => _geoLoading = false);
   }
+
+  /// Simple HTTP GET for Nominatim using Dio (works on web + mobile).
+  Future<Map<String, dynamic>?> _nominatimGet(Uri uri) async {
+    try {
+      final dio = Dio();
+      dio.options.headers['User-Agent'] = 'MossombiApp/1.0';
+      final response = await dio.getUri(uri);
+      if (response.statusCode == 200 && response.data is Map<String, dynamic>) {
+        return response.data as Map<String, dynamic>;
+      }
+    } catch (_) {}
+    return null;
+  }
+
 
   Future<void> _pickDocument(String docType) async {
     final picked = await _picker.pickImage(source: ImageSource.gallery, imageQuality: 70, maxWidth: 1200);
